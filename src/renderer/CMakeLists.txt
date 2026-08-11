@@ -5,6 +5,7 @@ add_library(synapse_renderer
     Vulkan/VulkanDevice.cpp
     Vulkan/VulkanQueues.cpp
     Vulkan/Renderer.cpp
+    Vulkan/MemoryAllocator.cpp
     Pipeline/Pipeline.cpp
     Pipeline/Pipeline.cpp
     Pipeline/Shader.cpp
@@ -29,13 +30,11 @@ target_link_libraries(synapse_renderer PUBLIC
     synapse_platform
     Vulkan::Vulkan
     fastgltf
+    VulkanMemoryAllocator
 )
 target_include_directories(synapse_renderer PUBLIC ${CMAKE_SOURCE_DIR}/src)
 target_compile_definitions(synapse_renderer PRIVATE
     SYNAPSE_SHADER_DIR="${CMAKE_CURRENT_SOURCE_DIR}/Shaders")
-target_link_libraries(synapse_renderer PRIVATE
-    VulkanMemoryAllocator
-)
 
 # --- Shaders : compilation SPIR-V + embed en header C (générés au build) ---
 find_program(GLSLC glslc)

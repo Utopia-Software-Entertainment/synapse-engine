@@ -45,6 +45,7 @@ Renderer::Renderer(Window& window, u32 width, u32 height)
     CreateSurface();
     PickPhysicalDevice();
     CreateDevice();
+    m_Allocator = std::make_unique<MemoryAllocator>(m_Instance, m_PhysicalDevice, m_Device);
     CreateSwapchain();
     m_MSAASamples = GetMaxSampleCount();
     CreateMSAAResources();
@@ -53,9 +54,11 @@ Renderer::Renderer(Window& window, u32 width, u32 height)
     CreateFramebuffers();
     CreateCommandBuffers();
     CreateSyncObjects();
-    m_ShadowPass = std::make_unique<ShadowPass>(m_Device, m_PhysicalDevice, m_DepthFormat);
+    m_ShadowPass = std::make_unique<ShadowPass>(m_Device, m_PhysicalDevice, m_DepthFormat,
+                                                2048, m_Allocator->Handle());
     m_SkyboxPass = std::make_unique<SkyboxPass>(m_Device, m_PhysicalDevice, m_RenderPass,
-                                                m_QueueFamilyIndex, m_MSAASamples);
+                                                m_QueueFamilyIndex, m_MSAASamples,
+                                                m_Allocator->Handle());
     CreateTexture();
     CreateDescriptorObjects();
     RecreatePipeline();
@@ -74,11 +77,8 @@ Renderer::~Renderer()
     m_ShadowPass.reset();
     m_SkyboxPass.reset();
 
-    vkDestroyBuffer(m_Device, m_VertexBuffer, nullptr);
-    vkFreeMemory(m_Device, m_VertexBufferMemory, nullptr);
-
-    vkDestroyBuffer(m_Device, m_IndexBuffer, nullptr);
-    vkFreeMemory(m_Device, m_IndexBufferMemory, nullptr);
+    vmaDestroyBuffer(m_Allocator->Handle(), m_VertexBuffer, m_VertexBufferMemory);
+    vmaDestroyBuffer(m_Allocator->Handle(), m_IndexBuffer, m_IndexBufferMemory);
 
     CleanupTexture();
 
@@ -191,38 +191,9 @@ void Renderer::CreateDescriptorObjects()
 
     for (u32 i = 0; i < kMaxFramesInFlight; ++i)
     {
-        VkBufferCreateInfo bufferInfo{};
-        bufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
-        bufferInfo.size = bufferSize;
-        bufferInfo.usage = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT;
-        bufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-        VK_CHECK(vkCreateBuffer(m_Device, &bufferInfo, nullptr, &m_Frames[i].uboBuffer));
-
-        VkMemoryRequirements memRequirements{};
-        vkGetBufferMemoryRequirements(m_Device, m_Frames[i].uboBuffer, &memRequirements);
-
-        VkPhysicalDeviceMemoryProperties memProperties{};
-        vkGetPhysicalDeviceMemoryProperties(m_PhysicalDevice, &memProperties);
-
-        u32 memoryType = VK_MAX_MEMORY_TYPES;
-        for (u32 t = 0; t < memProperties.memoryTypeCount; ++t)
-        {
-            if ((memRequirements.memoryTypeBits & (1u << t)) != 0 &&
-                (memProperties.memoryTypes[t].propertyFlags &
-                 (VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT)) != 0)
-            {
-                memoryType = t;
-                break;
-            }
-        }
-
-        VkMemoryAllocateInfo allocInfoBuffer{};
-        allocInfoBuffer.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
-        allocInfoBuffer.allocationSize = memRequirements.size;
-        allocInfoBuffer.memoryTypeIndex = memoryType;
-        VK_CHECK(vkAllocateMemory(m_Device, &allocInfoBuffer, nullptr, &m_Frames[i].uboMemory));
-        VK_CHECK(vkBindBufferMemory(m_Device, m_Frames[i].uboBuffer, m_Frames[i].uboMemory, 0));
-        VK_CHECK(vkMapMemory(m_Device, m_Frames[i].uboMemory, 0, bufferSize, 0, &m_Frames[i].uboMapped));
+        CreateHostVisibleBuffer(bufferSize, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
+                                &m_Frames[i].uboBuffer, &m_Frames[i].uboMemory,
+                                &m_Frames[i].uboMapped);
 
         CreateHostVisibleBuffer(sizeof(glm::mat4) * kMaxInstances,
                                 VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, &m_Frames[i].instanceBuffer,
@@ -291,41 +262,25 @@ void Renderer::CleanupDescriptorObjects()
     }
     for (Frame& frame : m_Frames)
     {
-        if (frame.uboMapped != nullptr)
-        {
-            vkUnmapMemory(m_Device, frame.uboMemory);
-            frame.uboMapped = nullptr;
-        }
         if (frame.uboBuffer != VK_NULL_HANDLE)
         {
-            vkDestroyBuffer(m_Device, frame.uboBuffer, nullptr);
+            vmaDestroyBuffer(m_Allocator->Handle(), frame.uboBuffer, frame.uboMemory);
             frame.uboBuffer = VK_NULL_HANDLE;
-        }
-        if (frame.uboMemory != VK_NULL_HANDLE)
-        {
-            vkFreeMemory(m_Device, frame.uboMemory, nullptr);
             frame.uboMemory = VK_NULL_HANDLE;
-        }
-        if (frame.instanceMapped != nullptr)
-        {
-            vkUnmapMemory(m_Device, frame.instanceMemory);
-            frame.instanceMapped = nullptr;
+            frame.uboMapped = nullptr;
         }
         if (frame.instanceBuffer != VK_NULL_HANDLE)
         {
-            vkDestroyBuffer(m_Device, frame.instanceBuffer, nullptr);
+            vmaDestroyBuffer(m_Allocator->Handle(), frame.instanceBuffer, frame.instanceMemory);
             frame.instanceBuffer = VK_NULL_HANDLE;
-        }
-        if (frame.instanceMemory != VK_NULL_HANDLE)
-        {
-            vkFreeMemory(m_Device, frame.instanceMemory, nullptr);
             frame.instanceMemory = VK_NULL_HANDLE;
+            frame.instanceMapped = nullptr;
         }
     }
 }
 
 VkBuffer Renderer::CreateDeviceBuffer(u32 size, VkBufferUsageFlags usage, const void* data,
-                                      VkDeviceMemory* outMemory)
+                                      VmaAllocation* outMemory)
 {
     VkBufferCreateInfo bufferInfo{};
     bufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
@@ -333,32 +288,12 @@ VkBuffer Renderer::CreateDeviceBuffer(u32 size, VkBufferUsageFlags usage, const 
     bufferInfo.usage = usage | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
     bufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
 
+    VmaAllocationCreateInfo allocInfo{};
+    allocInfo.usage = VMA_MEMORY_USAGE_GPU_ONLY;
+
     VkBuffer buffer = VK_NULL_HANDLE;
-    VK_CHECK(vkCreateBuffer(m_Device, &bufferInfo, nullptr, &buffer));
-
-    VkMemoryRequirements memRequirements{};
-    vkGetBufferMemoryRequirements(m_Device, buffer, &memRequirements);
-
-    VkPhysicalDeviceMemoryProperties memProperties{};
-    vkGetPhysicalDeviceMemoryProperties(m_PhysicalDevice, &memProperties);
-
-    u32 memoryType = VK_MAX_MEMORY_TYPES;
-    for (u32 i = 0; i < memProperties.memoryTypeCount; ++i)
-    {
-        if ((memRequirements.memoryTypeBits & (1u << i)) != 0 &&
-            (memProperties.memoryTypes[i].propertyFlags & VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT) != 0)
-        {
-            memoryType = i;
-            break;
-        }
-    }
-
-    VkMemoryAllocateInfo allocInfo{};
-    allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
-    allocInfo.allocationSize = memRequirements.size;
-    allocInfo.memoryTypeIndex = memoryType;
-    VK_CHECK(vkAllocateMemory(m_Device, &allocInfo, nullptr, outMemory));
-    VK_CHECK(vkBindBufferMemory(m_Device, buffer, *outMemory, 0));
+    VK_CHECK(vmaCreateBuffer(m_Allocator->Handle(), &bufferInfo, &allocInfo, &buffer, outMemory,
+                             nullptr));
 
     VkBufferCreateInfo stagingInfo{};
     stagingInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
@@ -366,34 +301,17 @@ VkBuffer Renderer::CreateDeviceBuffer(u32 size, VkBufferUsageFlags usage, const 
     stagingInfo.usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
     stagingInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
 
+    VmaAllocationCreateInfo stagingAllocInfo{};
+    stagingAllocInfo.usage = VMA_MEMORY_USAGE_CPU_ONLY;
+    stagingAllocInfo.flags = VMA_ALLOCATION_CREATE_MAPPED_BIT;
+
     VkBuffer stagingBuffer = VK_NULL_HANDLE;
-    VK_CHECK(vkCreateBuffer(m_Device, &stagingInfo, nullptr, &stagingBuffer));
+    VmaAllocation stagingMemory = VK_NULL_HANDLE;
+    VmaAllocationInfo stagingAllocationInfo{};
+    VK_CHECK(vmaCreateBuffer(m_Allocator->Handle(), &stagingInfo, &stagingAllocInfo,
+                             &stagingBuffer, &stagingMemory, &stagingAllocationInfo));
 
-    vkGetBufferMemoryRequirements(m_Device, stagingBuffer, &memRequirements);
-
-    memoryType = VK_MAX_MEMORY_TYPES;
-    for (u32 i = 0; i < memProperties.memoryTypeCount; ++i)
-    {
-        if ((memRequirements.memoryTypeBits & (1u << i)) != 0 &&
-            (memProperties.memoryTypes[i].propertyFlags &
-             (VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT)) != 0)
-        {
-            memoryType = i;
-            break;
-        }
-    }
-
-    VkDeviceMemory stagingMemory = VK_NULL_HANDLE;
-    allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
-    allocInfo.allocationSize = memRequirements.size;
-    allocInfo.memoryTypeIndex = memoryType;
-    VK_CHECK(vkAllocateMemory(m_Device, &allocInfo, nullptr, &stagingMemory));
-    VK_CHECK(vkBindBufferMemory(m_Device, stagingBuffer, stagingMemory, 0));
-
-    void* mapped = nullptr;
-    vkMapMemory(m_Device, stagingMemory, 0, size, 0, &mapped);
-    std::memcpy(mapped, data, size);
-    vkUnmapMemory(m_Device, stagingMemory);
+    std::memcpy(stagingAllocationInfo.pMappedData, data, size);
 
     VkCommandBuffer cmd = BeginSingleTimeCommands();
     VkBufferCopy copyRegion{};
@@ -401,14 +319,13 @@ VkBuffer Renderer::CreateDeviceBuffer(u32 size, VkBufferUsageFlags usage, const 
     vkCmdCopyBuffer(cmd, stagingBuffer, buffer, 1, &copyRegion);
     EndSingleTimeCommands(cmd);
 
-    vkDestroyBuffer(m_Device, stagingBuffer, nullptr);
-    vkFreeMemory(m_Device, stagingMemory, nullptr);
+    vmaDestroyBuffer(m_Allocator->Handle(), stagingBuffer, stagingMemory);
 
     return buffer;
 }
 
 void Renderer::CreateHostVisibleBuffer(VkDeviceSize size, VkBufferUsageFlags usage,
-                                       VkBuffer* outBuffer, VkDeviceMemory* outMemory,
+                                       VkBuffer* outBuffer, VmaAllocation* outMemory,
                                        void** outMapped)
 {
     VkBufferCreateInfo bufferInfo{};
@@ -416,33 +333,15 @@ void Renderer::CreateHostVisibleBuffer(VkDeviceSize size, VkBufferUsageFlags usa
     bufferInfo.size = size;
     bufferInfo.usage = usage;
     bufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-    VK_CHECK(vkCreateBuffer(m_Device, &bufferInfo, nullptr, outBuffer));
 
-    VkMemoryRequirements memRequirements{};
-    vkGetBufferMemoryRequirements(m_Device, *outBuffer, &memRequirements);
+    VmaAllocationCreateInfo allocInfo{};
+    allocInfo.usage = VMA_MEMORY_USAGE_CPU_TO_GPU;
+    allocInfo.flags = VMA_ALLOCATION_CREATE_MAPPED_BIT;
 
-    VkPhysicalDeviceMemoryProperties memProperties{};
-    vkGetPhysicalDeviceMemoryProperties(m_PhysicalDevice, &memProperties);
-
-    u32 memoryType = VK_MAX_MEMORY_TYPES;
-    for (u32 i = 0; i < memProperties.memoryTypeCount; ++i)
-    {
-        if ((memRequirements.memoryTypeBits & (1u << i)) != 0 &&
-            (memProperties.memoryTypes[i].propertyFlags &
-             (VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT)) != 0)
-        {
-            memoryType = i;
-            break;
-        }
-    }
-
-    VkMemoryAllocateInfo allocInfo{};
-    allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
-    allocInfo.allocationSize = memRequirements.size;
-    allocInfo.memoryTypeIndex = memoryType;
-    VK_CHECK(vkAllocateMemory(m_Device, &allocInfo, nullptr, outMemory));
-    VK_CHECK(vkBindBufferMemory(m_Device, *outBuffer, *outMemory, 0));
-    VK_CHECK(vkMapMemory(m_Device, *outMemory, 0, size, 0, outMapped));
+    VmaAllocationInfo allocationInfo{};
+    VK_CHECK(vmaCreateBuffer(m_Allocator->Handle(), &bufferInfo, &allocInfo, outBuffer, outMemory,
+                             &allocationInfo));
+    *outMapped = allocationInfo.pMappedData;
 }
 
 VkCommandBuffer Renderer::BeginSingleTimeCommands()
@@ -518,40 +417,17 @@ void Renderer::CreateTexture()
     stagingInfo.usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
     stagingInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
 
+    VmaAllocationCreateInfo stagingAllocInfo{};
+    stagingAllocInfo.usage = VMA_MEMORY_USAGE_CPU_ONLY;
+    stagingAllocInfo.flags = VMA_ALLOCATION_CREATE_MAPPED_BIT;
+
     VkBuffer stagingBuffer = VK_NULL_HANDLE;
-    VK_CHECK(vkCreateBuffer(m_Device, &stagingInfo, nullptr, &stagingBuffer));
+    VmaAllocation stagingMemory = VK_NULL_HANDLE;
+    VmaAllocationInfo stagingAllocationInfo{};
+    VK_CHECK(vmaCreateBuffer(m_Allocator->Handle(), &stagingInfo, &stagingAllocInfo,
+                             &stagingBuffer, &stagingMemory, &stagingAllocationInfo));
 
-    VkMemoryRequirements memRequirements{};
-    vkGetBufferMemoryRequirements(m_Device, stagingBuffer, &memRequirements);
-
-    VkPhysicalDeviceMemoryProperties memProperties{};
-    vkGetPhysicalDeviceMemoryProperties(m_PhysicalDevice, &memProperties);
-
-    u32 memoryType = VK_MAX_MEMORY_TYPES;
-    for (u32 i = 0; i < memProperties.memoryTypeCount; ++i)
-    {
-        if ((memRequirements.memoryTypeBits & (1u << i)) != 0 &&
-            (memProperties.memoryTypes[i].propertyFlags &
-             (VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT)) != 0)
-        {
-            memoryType = i;
-            break;
-        }
-    }
-
-    VkMemoryAllocateInfo allocInfo{};
-    allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
-    allocInfo.allocationSize = memRequirements.size;
-    allocInfo.memoryTypeIndex = memoryType;
-
-    VkDeviceMemory stagingMemory = VK_NULL_HANDLE;
-    VK_CHECK(vkAllocateMemory(m_Device, &allocInfo, nullptr, &stagingMemory));
-    VK_CHECK(vkBindBufferMemory(m_Device, stagingBuffer, stagingMemory, 0));
-
-    void* mapped = nullptr;
-    vkMapMemory(m_Device, stagingMemory, 0, pixels.size(), 0, &mapped);
-    std::memcpy(mapped, pixels.data(), pixels.size());
-    vkUnmapMemory(m_Device, stagingMemory);
+    std::memcpy(stagingAllocationInfo.pMappedData, pixels.data(), pixels.size());
 
     VkImageCreateInfo imageInfo{};
     imageInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
@@ -567,26 +443,12 @@ void Renderer::CreateTexture()
     imageInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
     imageInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
 
-    VK_CHECK(vkCreateImage(m_Device, &imageInfo, nullptr, &m_TextureImage));
+    VmaAllocationCreateInfo gpuAllocInfo{};
+    gpuAllocInfo.usage = VMA_MEMORY_USAGE_GPU_ONLY;
 
-    vkGetImageMemoryRequirements(m_Device, m_TextureImage, &memRequirements);
-
-    memoryType = VK_MAX_MEMORY_TYPES;
-    for (u32 i = 0; i < memProperties.memoryTypeCount; ++i)
-    {
-        if ((memRequirements.memoryTypeBits & (1u << i)) != 0 &&
-            (memProperties.memoryTypes[i].propertyFlags & VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT) != 0)
-        {
-            memoryType = i;
-            break;
-        }
-    }
-
-    allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
-    allocInfo.allocationSize = memRequirements.size;
-    allocInfo.memoryTypeIndex = memoryType;
-    VK_CHECK(vkAllocateMemory(m_Device, &allocInfo, nullptr, &m_TextureMemory));
-    VK_CHECK(vkBindImageMemory(m_Device, m_TextureImage, m_TextureMemory, 0));
+    VK_CHECK(vmaCreateImage(m_Allocator->Handle(), &imageInfo,
+                            &gpuAllocInfo, &m_TextureImage,
+                            &m_TextureMemory, nullptr));
 
     VkCommandBuffer cmd = BeginSingleTimeCommands();
 
@@ -678,8 +540,7 @@ void Renderer::CreateTexture()
 
     EndSingleTimeCommands(cmd);
 
-    vkDestroyBuffer(m_Device, stagingBuffer, nullptr);
-    vkFreeMemory(m_Device, stagingMemory, nullptr);
+    vmaDestroyBuffer(m_Allocator->Handle(), stagingBuffer, stagingMemory);
 
     VkImageViewCreateInfo viewInfo{};
     viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
@@ -726,12 +587,8 @@ void Renderer::CleanupTexture()
     }
     if (m_TextureImage != VK_NULL_HANDLE)
     {
-        vkDestroyImage(m_Device, m_TextureImage, nullptr);
+        vmaDestroyImage(m_Allocator->Handle(), m_TextureImage, m_TextureMemory);
         m_TextureImage = VK_NULL_HANDLE;
-    }
-    if (m_TextureMemory != VK_NULL_HANDLE)
-    {
-        vkFreeMemory(m_Device, m_TextureMemory, nullptr);
         m_TextureMemory = VK_NULL_HANDLE;
     }
 }
@@ -1002,31 +859,12 @@ void Renderer::CreateMSAAResources()
     imageInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
     imageInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
 
-    VK_CHECK(vkCreateImage(m_Device, &imageInfo, nullptr, &m_MSAAColorImage));
+    VmaAllocationCreateInfo gpuAllocInfo{};
+    gpuAllocInfo.usage = VMA_MEMORY_USAGE_GPU_ONLY;
 
-    VkMemoryRequirements memRequirements{};
-    vkGetImageMemoryRequirements(m_Device, m_MSAAColorImage, &memRequirements);
-
-    VkPhysicalDeviceMemoryProperties memProperties{};
-    vkGetPhysicalDeviceMemoryProperties(m_PhysicalDevice, &memProperties);
-
-    u32 memoryType = VK_MAX_MEMORY_TYPES;
-    for (u32 i = 0; i < memProperties.memoryTypeCount; ++i)
-    {
-        if ((memRequirements.memoryTypeBits & (1u << i)) != 0 &&
-            (memProperties.memoryTypes[i].propertyFlags & VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT) != 0)
-        {
-            memoryType = i;
-            break;
-        }
-    }
-
-    VkMemoryAllocateInfo allocInfo{};
-    allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
-    allocInfo.allocationSize = memRequirements.size;
-    allocInfo.memoryTypeIndex = memoryType;
-    VK_CHECK(vkAllocateMemory(m_Device, &allocInfo, nullptr, &m_MSAAColorMemory));
-    VK_CHECK(vkBindImageMemory(m_Device, m_MSAAColorImage, m_MSAAColorMemory, 0));
+    VK_CHECK(vmaCreateImage(m_Allocator->Handle(), &imageInfo,
+                            &gpuAllocInfo,
+                            &m_MSAAColorImage, &m_MSAAColorMemory, nullptr));
 
     VkImageViewCreateInfo viewInfo{};
     viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
@@ -1048,12 +886,8 @@ void Renderer::CleanupMSAAResources()
     }
     if (m_MSAAColorImage != VK_NULL_HANDLE)
     {
-        vkDestroyImage(m_Device, m_MSAAColorImage, nullptr);
+        vmaDestroyImage(m_Allocator->Handle(), m_MSAAColorImage, m_MSAAColorMemory);
         m_MSAAColorImage = VK_NULL_HANDLE;
-    }
-    if (m_MSAAColorMemory != VK_NULL_HANDLE)
-    {
-        vkFreeMemory(m_Device, m_MSAAColorMemory, nullptr);
         m_MSAAColorMemory = VK_NULL_HANDLE;
     }
 }
@@ -1093,31 +927,12 @@ void Renderer::CreateDepthResources()
     imageInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
     imageInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
 
-    VK_CHECK(vkCreateImage(m_Device, &imageInfo, nullptr, &m_DepthImage));
+    VmaAllocationCreateInfo gpuAllocInfo{};
+    gpuAllocInfo.usage = VMA_MEMORY_USAGE_GPU_ONLY;
 
-    VkMemoryRequirements memRequirements{};
-    vkGetImageMemoryRequirements(m_Device, m_DepthImage, &memRequirements);
-
-    VkPhysicalDeviceMemoryProperties memProperties{};
-    vkGetPhysicalDeviceMemoryProperties(m_PhysicalDevice, &memProperties);
-
-    u32 memoryType = VK_MAX_MEMORY_TYPES;
-    for (u32 i = 0; i < memProperties.memoryTypeCount; ++i)
-    {
-        if ((memRequirements.memoryTypeBits & (1u << i)) != 0 &&
-            (memProperties.memoryTypes[i].propertyFlags & VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT) != 0)
-        {
-            memoryType = i;
-            break;
-        }
-    }
-
-    VkMemoryAllocateInfo allocInfo{};
-    allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
-    allocInfo.allocationSize = memRequirements.size;
-    allocInfo.memoryTypeIndex = memoryType;
-    VK_CHECK(vkAllocateMemory(m_Device, &allocInfo, nullptr, &m_DepthMemory));
-    VK_CHECK(vkBindImageMemory(m_Device, m_DepthImage, m_DepthMemory, 0));
+    VK_CHECK(vmaCreateImage(m_Allocator->Handle(), &imageInfo,
+                            &gpuAllocInfo, &m_DepthImage,
+                            &m_DepthMemory, nullptr));
 
     VkImageViewCreateInfo viewInfo{};
     viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
@@ -1139,12 +954,8 @@ void Renderer::CleanupDepthResources()
     }
     if (m_DepthImage != VK_NULL_HANDLE)
     {
-        vkDestroyImage(m_Device, m_DepthImage, nullptr);
+        vmaDestroyImage(m_Allocator->Handle(), m_DepthImage, m_DepthMemory);
         m_DepthImage = VK_NULL_HANDLE;
-    }
-    if (m_DepthMemory != VK_NULL_HANDLE)
-    {
-        vkFreeMemory(m_Device, m_DepthMemory, nullptr);
         m_DepthMemory = VK_NULL_HANDLE;
     }
 }

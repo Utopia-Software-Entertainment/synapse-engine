@@ -31,24 +31,6 @@ namespace {
 
 constexpr u32 kLayerCount = 6;
 
-u32 FindMemoryType(VkPhysicalDevice physicalDevice, u32 typeBits,
-                   VkMemoryPropertyFlags properties)
-{
-    VkPhysicalDeviceMemoryProperties memProperties{};
-    vkGetPhysicalDeviceMemoryProperties(physicalDevice, &memProperties);
-
-    for (u32 i = 0; i < memProperties.memoryTypeCount; ++i)
-    {
-        if ((typeBits & (1u << i)) != 0 &&
-            (memProperties.memoryTypes[i].propertyFlags & properties) == properties)
-        {
-            return i;
-        }
-    }
-    SYNAPSE_CORE_CRITICAL("SkyboxPass: no suitable memory type");
-    std::abort();
-}
-
 glm::vec3 CubeFaceDirection(u32 layer, float u, float v)
 {
     const float x = u * 2.0f - 1.0f;
@@ -114,11 +96,13 @@ void EndSingleTime(VkDevice device, VkQueue queue, VkCommandPool pool, VkCommand
 } // namespace
 
 SkyboxPass::SkyboxPass(VkDevice device, VkPhysicalDevice physicalDevice, VkRenderPass renderPass,
-                       u32 queueFamilyIndex, VkSampleCountFlagBits sampleCount)
+                       u32 queueFamilyIndex, VkSampleCountFlagBits sampleCount,
+                       VmaAllocator allocator)
     : m_Device(device),
       m_PhysicalDevice(physicalDevice),
       m_QueueFamilyIndex(queueFamilyIndex),
-      m_SampleCount(sampleCount)
+      m_SampleCount(sampleCount),
+      m_Allocator(allocator)
 {
     CreateCubeMap();
     CreateDescriptors();
@@ -144,8 +128,7 @@ SkyboxPass::~SkyboxPass()
     vkDestroyDescriptorSetLayout(m_Device, m_SetLayout, nullptr);
     vkDestroySampler(m_Device, m_Sampler, nullptr);
     vkDestroyImageView(m_Device, m_ImageView, nullptr);
-    vkDestroyImage(m_Device, m_Image, nullptr);
-    vkFreeMemory(m_Device, m_Memory, nullptr);
+    vmaDestroyImage(m_Allocator, m_Image, m_Memory);
 }
 
 void SkyboxPass::CreateCubeMap()
@@ -192,27 +175,17 @@ void SkyboxPass::CreateCubeMap()
     stagingInfo.usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
     stagingInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
 
+    VmaAllocationCreateInfo stagingAllocInfo{};
+    stagingAllocInfo.usage = VMA_MEMORY_USAGE_CPU_ONLY;
+    stagingAllocInfo.flags = VMA_ALLOCATION_CREATE_MAPPED_BIT;
+
     VkBuffer stagingBuffer = VK_NULL_HANDLE;
-    SKYBOX_VK_CHECK(vkCreateBuffer(m_Device, &stagingInfo, nullptr, &stagingBuffer));
+    VmaAllocation stagingMemory = VK_NULL_HANDLE;
+    VmaAllocationInfo stagingAllocationInfo{};
+    SKYBOX_VK_CHECK(vmaCreateBuffer(m_Allocator, &stagingInfo, &stagingAllocInfo, &stagingBuffer,
+                                    &stagingMemory, &stagingAllocationInfo));
 
-    VkMemoryRequirements memRequirements{};
-    vkGetBufferMemoryRequirements(m_Device, stagingBuffer, &memRequirements);
-
-    VkMemoryAllocateInfo allocInfo{};
-    allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
-    allocInfo.allocationSize = memRequirements.size;
-    allocInfo.memoryTypeIndex =
-        FindMemoryType(m_PhysicalDevice, memRequirements.memoryTypeBits,
-                       VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
-
-    VkDeviceMemory stagingMemory = VK_NULL_HANDLE;
-    SKYBOX_VK_CHECK(vkAllocateMemory(m_Device, &allocInfo, nullptr, &stagingMemory));
-    SKYBOX_VK_CHECK(vkBindBufferMemory(m_Device, stagingBuffer, stagingMemory, 0));
-
-    void* mapped = nullptr;
-    vkMapMemory(m_Device, stagingMemory, 0, kTotalBytes, 0, &mapped);
-    std::memcpy(mapped, pixels.data(), kTotalBytes);
-    vkUnmapMemory(m_Device, stagingMemory);
+    std::memcpy(stagingAllocationInfo.pMappedData, pixels.data(), kTotalBytes);
 
     VkImageCreateInfo imageInfo{};
     imageInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
@@ -228,16 +201,12 @@ void SkyboxPass::CreateCubeMap()
     imageInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
     imageInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
 
-    SKYBOX_VK_CHECK(vkCreateImage(m_Device, &imageInfo, nullptr, &m_Image));
+    VmaAllocationCreateInfo gpuAllocInfo{};
+    gpuAllocInfo.usage = VMA_MEMORY_USAGE_GPU_ONLY;
 
-    vkGetImageMemoryRequirements(m_Device, m_Image, &memRequirements);
-    allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
-    allocInfo.allocationSize = memRequirements.size;
-    allocInfo.memoryTypeIndex =
-        FindMemoryType(m_PhysicalDevice, memRequirements.memoryTypeBits,
-                       VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
-    SKYBOX_VK_CHECK(vkAllocateMemory(m_Device, &allocInfo, nullptr, &m_Memory));
-    SKYBOX_VK_CHECK(vkBindImageMemory(m_Device, m_Image, m_Memory, 0));
+    SKYBOX_VK_CHECK(vmaCreateImage(m_Allocator, &imageInfo,
+                                   &gpuAllocInfo,
+                                   &m_Image, &m_Memory, nullptr));
 
     VkCommandBuffer cmd = BeginSingleTime(m_Device, pool);
 
@@ -283,8 +252,7 @@ void SkyboxPass::CreateCubeMap()
 
     EndSingleTime(m_Device, queue, pool, cmd);
     vkDestroyCommandPool(m_Device, pool, nullptr);
-    vkDestroyBuffer(m_Device, stagingBuffer, nullptr);
-    vkFreeMemory(m_Device, stagingMemory, nullptr);
+    vmaDestroyBuffer(m_Allocator, stagingBuffer, stagingMemory);
 
     VkImageViewCreateInfo viewInfo{};
     viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;

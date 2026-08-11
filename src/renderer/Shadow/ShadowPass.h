@@ -8,6 +8,8 @@
 
 #include <vulkan/vulkan.h>
 
+#include <vk_mem_alloc.h>
+
 #include <chrono>
 #include <filesystem>
 #include <string>
@@ -20,7 +22,7 @@ class ShadowPass
 {
 public:
     ShadowPass(VkDevice device, VkPhysicalDevice physicalDevice, VkFormat depthFormat,
-               u32 size = 2048);
+               u32 size = 2048, VmaAllocator allocator = VK_NULL_HANDLE);
     ~ShadowPass();
 
     ShadowPass(const ShadowPass&) = delete;
@@ -48,7 +50,8 @@ private:
     u32 m_Size = 2048;
 
     VkImage m_Image = VK_NULL_HANDLE;
-    VkDeviceMemory m_Memory = VK_NULL_HANDLE;
+    VmaAllocation m_Memory = VK_NULL_HANDLE;
+    VmaAllocator m_Allocator = VK_NULL_HANDLE;
     VkImageView m_ImageView = VK_NULL_HANDLE;
     VkSampler m_Sampler = VK_NULL_HANDLE;
     VkRenderPass m_RenderPass = VK_NULL_HANDLE;

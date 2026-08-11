@@ -26,29 +26,15 @@ namespace {
         }                                                                       \
     } while (false)
 
-u32 FindMemoryType(VkPhysicalDevice physicalDevice, u32 typeBits,
-                   VkMemoryPropertyFlags properties)
-{
-    VkPhysicalDeviceMemoryProperties memProperties{};
-    vkGetPhysicalDeviceMemoryProperties(physicalDevice, &memProperties);
-
-    for (u32 i = 0; i < memProperties.memoryTypeCount; ++i)
-    {
-        if ((typeBits & (1u << i)) != 0 &&
-            (memProperties.memoryTypes[i].propertyFlags & properties) == properties)
-        {
-            return i;
-        }
-    }
-    SYNAPSE_CORE_CRITICAL("ShadowPass: no suitable memory type");
-    std::abort();
-}
-
 } // namespace
 
 ShadowPass::ShadowPass(VkDevice device, VkPhysicalDevice physicalDevice, VkFormat depthFormat,
-                       u32 size)
-    : m_Device(device), m_PhysicalDevice(physicalDevice), m_Format(depthFormat), m_Size(size)
+                       u32 size, VmaAllocator allocator)
+    : m_Device(device),
+      m_PhysicalDevice(physicalDevice),
+      m_Format(depthFormat),
+      m_Size(size),
+      m_Allocator(allocator)
 {
     CreateImage();
     CreateSampler();
@@ -71,8 +57,7 @@ ShadowPass::~ShadowPass()
     vkDestroyRenderPass(m_Device, m_RenderPass, nullptr);
     vkDestroySampler(m_Device, m_Sampler, nullptr);
     vkDestroyImageView(m_Device, m_ImageView, nullptr);
-    vkDestroyImage(m_Device, m_Image, nullptr);
-    vkFreeMemory(m_Device, m_Memory, nullptr);
+    vmaDestroyImage(m_Allocator, m_Image, m_Memory);
 }
 
 void ShadowPass::CreateImage()
@@ -90,19 +75,12 @@ void ShadowPass::CreateImage()
     imageInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
     imageInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
 
-    SHADOW_VK_CHECK(vkCreateImage(m_Device, &imageInfo, nullptr, &m_Image));
+    VmaAllocationCreateInfo gpuAllocInfo{};
+    gpuAllocInfo.usage = VMA_MEMORY_USAGE_GPU_ONLY;
 
-    VkMemoryRequirements memRequirements{};
-    vkGetImageMemoryRequirements(m_Device, m_Image, &memRequirements);
-
-    VkMemoryAllocateInfo allocInfo{};
-    allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
-    allocInfo.allocationSize = memRequirements.size;
-    allocInfo.memoryTypeIndex =
-        FindMemoryType(m_PhysicalDevice, memRequirements.memoryTypeBits,
-                       VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
-    SHADOW_VK_CHECK(vkAllocateMemory(m_Device, &allocInfo, nullptr, &m_Memory));
-    SHADOW_VK_CHECK(vkBindImageMemory(m_Device, m_Image, m_Memory, 0));
+    SHADOW_VK_CHECK(vmaCreateImage(m_Allocator, &imageInfo,
+                                   &gpuAllocInfo,
+                                   &m_Image, &m_Memory, nullptr));
 
     VkImageViewCreateInfo viewInfo{};
     viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;

@@ -6,6 +6,8 @@
 
 #include <vulkan/vulkan.h>
 
+#include <vk_mem_alloc.h>
+
 #include <chrono>
 #include <filesystem>
 #include <string>
@@ -17,7 +19,8 @@ class SkyboxPass
 {
 public:
     SkyboxPass(VkDevice device, VkPhysicalDevice physicalDevice, VkRenderPass renderPass,
-               u32 queueFamilyIndex, VkSampleCountFlagBits sampleCount = VK_SAMPLE_COUNT_1_BIT);
+               u32 queueFamilyIndex, VkSampleCountFlagBits sampleCount = VK_SAMPLE_COUNT_1_BIT,
+               VmaAllocator allocator = VK_NULL_HANDLE);
     ~SkyboxPass();
 
     SkyboxPass(const SkyboxPass&) = delete;
@@ -38,10 +41,11 @@ private:
     VkPhysicalDevice m_PhysicalDevice = VK_NULL_HANDLE;
     u32 m_QueueFamilyIndex = 0;
     VkSampleCountFlagBits m_SampleCount = VK_SAMPLE_COUNT_1_BIT;
+    VmaAllocator m_Allocator = VK_NULL_HANDLE;
 
     static constexpr u32 kFaceSize = 128;
     VkImage m_Image = VK_NULL_HANDLE;
-    VkDeviceMemory m_Memory = VK_NULL_HANDLE;
+    VmaAllocation m_Memory = VK_NULL_HANDLE;
     VkImageView m_ImageView = VK_NULL_HANDLE;
     VkSampler m_Sampler = VK_NULL_HANDLE;
     VkDescriptorSetLayout m_SetLayout = VK_NULL_HANDLE;

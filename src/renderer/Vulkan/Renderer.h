@@ -1,6 +1,7 @@
 #pragma once
 
 #include <renderer/Vulkan/DrawItem.h>
+#include <renderer/Vulkan/MemoryAllocator.h>
 
 #include <core/Types.h>
 #include <renderer/Mesh/Mesh.h>
@@ -20,6 +21,7 @@ class Pipeline;
 class ShadowPass;
 class SkyboxPass;
 class Window;
+class MemoryAllocator;
 
 class Renderer
 {
@@ -46,9 +48,9 @@ private:
         VkFence inFlight = VK_NULL_HANDLE;
         VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
         VkBuffer uboBuffer = VK_NULL_HANDLE;
-        VkDeviceMemory uboMemory = VK_NULL_HANDLE;
+        VmaAllocation uboMemory = VK_NULL_HANDLE;
         VkBuffer instanceBuffer = VK_NULL_HANDLE;
-        VkDeviceMemory instanceMemory = VK_NULL_HANDLE;
+        VmaAllocation instanceMemory = VK_NULL_HANDLE;
         VkDescriptorSet descriptorSet = VK_NULL_HANDLE;
         VkDescriptorSet shadowDescriptorSet = VK_NULL_HANDLE;
         void* uboMapped = nullptr;
@@ -83,9 +85,9 @@ private:
     void CleanupTexture();
     VkSampleCountFlagBits GetMaxSampleCount();
     VkBuffer CreateDeviceBuffer(u32 size, VkBufferUsageFlags usage, const void* data,
-                                VkDeviceMemory* outMemory);
+                                VmaAllocation* outMemory);
     void CreateHostVisibleBuffer(VkDeviceSize size, VkBufferUsageFlags usage, VkBuffer* outBuffer,
-                                 VkDeviceMemory* outMemory, void** outMapped);
+                                 VmaAllocation* outMemory, void** outMapped);
     VkCommandBuffer BeginSingleTimeCommands();
     void EndSingleTimeCommands(VkCommandBuffer commandBuffer);
     void RecordCommandBuffer(Frame& frame, u32 imageIndex);
@@ -112,10 +114,10 @@ private:
     VkRenderPass m_RenderPass = VK_NULL_HANDLE;
     VkSampleCountFlagBits m_MSAASamples = VK_SAMPLE_COUNT_1_BIT;
     VkImage m_MSAAColorImage = VK_NULL_HANDLE;
-    VkDeviceMemory m_MSAAColorMemory = VK_NULL_HANDLE;
+    VmaAllocation m_MSAAColorMemory = VK_NULL_HANDLE;
     VkImageView m_MSAAColorView = VK_NULL_HANDLE;
     VkImage m_DepthImage = VK_NULL_HANDLE;
-    VkDeviceMemory m_DepthMemory = VK_NULL_HANDLE;
+    VmaAllocation m_DepthMemory = VK_NULL_HANDLE;
     VkImageView m_DepthImageView = VK_NULL_HANDLE;
     VkFormat m_DepthFormat = VK_FORMAT_UNDEFINED;
     VkCommandPool m_CommandPool = VK_NULL_HANDLE;
@@ -125,18 +127,19 @@ private:
     std::unique_ptr<Pipeline> m_Pipeline;
     std::unique_ptr<ShadowPass> m_ShadowPass;
     std::unique_ptr<SkyboxPass> m_SkyboxPass;
+    std::unique_ptr<MemoryAllocator> m_Allocator;
     VkBuffer m_VertexBuffer = VK_NULL_HANDLE;
-    VkDeviceMemory m_VertexBufferMemory = VK_NULL_HANDLE;
+    VmaAllocation m_VertexBufferMemory = VK_NULL_HANDLE;
     u32 m_VertexCount = 0;
     VkBuffer m_IndexBuffer = VK_NULL_HANDLE;
-    VkDeviceMemory m_IndexBufferMemory = VK_NULL_HANDLE;
+    VmaAllocation m_IndexBufferMemory = VK_NULL_HANDLE;
     u32 m_IndexCount = 0;
 
     VkDescriptorSetLayout m_DescriptorSetLayout = VK_NULL_HANDLE;
     VkDescriptorSetLayout m_ShadowSetLayout = VK_NULL_HANDLE;
     VkDescriptorPool m_DescriptorPool = VK_NULL_HANDLE;
     VkImage m_TextureImage = VK_NULL_HANDLE;
-    VkDeviceMemory m_TextureMemory = VK_NULL_HANDLE;
+    VmaAllocation m_TextureMemory = VK_NULL_HANDLE;
     VkImageView m_TextureImageView = VK_NULL_HANDLE;
     VkSampler m_TextureSampler = VK_NULL_HANDLE;
     std::vector<DrawItem> m_DrawItems;
