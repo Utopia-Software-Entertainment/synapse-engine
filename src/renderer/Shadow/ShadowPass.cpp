@@ -1,5 +1,7 @@
 #include <renderer/Shadow/ShadowPass.h>
 
+#include <renderer/Pipeline/ShaderCompiler.h>
+
 #include <core/Logger.h>
 
 #include <shadow.vert.h>
@@ -7,6 +9,7 @@
 #include <array>
 #include <cstdlib>
 #include <cstring>
+#include <string>
 
 namespace synapse {
 namespace {
@@ -51,7 +54,11 @@ ShadowPass::ShadowPass(VkDevice device, VkPhysicalDevice physicalDevice, VkForma
     CreateSampler();
     CreateRenderPass();
     CreateFramebuffer();
-    CreatePipeline();
+
+    m_VertSourcePath = SYNAPSE_SHADER_DIR "/shadow.vert.glsl";
+    ShaderCompiler::GetModifiedTime(m_VertSourcePath, m_LastVertMtime);
+    CreatePipeline(std::string_view(reinterpret_cast<const char*>(synapse::shadow_vert_data),
+                                    synapse::shadow_vert_size));
 
     SYNAPSE_CORE_INFO("Shadow pass created ({}x{} depth map)", m_Size, m_Size);
 }
@@ -176,15 +183,44 @@ void ShadowPass::CreateFramebuffer()
     SHADOW_VK_CHECK(vkCreateFramebuffer(m_Device, &createInfo, nullptr, &m_Framebuffer));
 }
 
-void ShadowPass::CreatePipeline()
+bool ShadowPass::ReloadIfChanged()
 {
-    const auto* vertData = reinterpret_cast<const char*>(synapse::shadow_vert_data);
-    const auto vertSize = synapse::shadow_vert_size;
+    const auto now = std::chrono::steady_clock::now();
+    if (now - m_LastCheckTime < std::chrono::milliseconds(250))
+    {
+        return false;
+    }
+    m_LastCheckTime = now;
 
+    std::filesystem::file_time_type mtime{};
+    if (!ShaderCompiler::GetModifiedTime(m_VertSourcePath, mtime))
+    {
+        return false;
+    }
+    if (mtime == m_LastVertMtime)
+    {
+        return false;
+    }
+    m_LastVertMtime = mtime;
+
+    std::vector<uint8_t> spirv;
+    if (!ShaderCompiler::CompileToSpirv(m_VertSourcePath, "vert", spirv))
+    {
+        return false;
+    }
+
+    CreatePipeline(std::string_view(reinterpret_cast<const char*>(spirv.data()), spirv.size()));
+
+    SYNAPSE_CORE_INFO("Shader hot-reload: shadow pipeline reconstruit");
+    return true;
+}
+
+void ShadowPass::CreatePipeline(std::string_view vertSpirv)
+{
     VkShaderModuleCreateInfo moduleInfo{};
     moduleInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
-    moduleInfo.codeSize = vertSize;
-    moduleInfo.pCode = reinterpret_cast<const u32*>(vertData);
+    moduleInfo.codeSize = vertSpirv.size();
+    moduleInfo.pCode = reinterpret_cast<const u32*>(vertSpirv.data());
 
     VkShaderModule vertModule = VK_NULL_HANDLE;
     SHADOW_VK_CHECK(vkCreateShaderModule(m_Device, &moduleInfo, nullptr, &vertModule));
@@ -279,12 +315,15 @@ void ShadowPass::CreatePipeline()
     pushConstantRange.offset = 0;
     pushConstantRange.size = sizeof(glm::mat4);
 
-    VkPipelineLayoutCreateInfo layoutInfo{};
-    layoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-    layoutInfo.setLayoutCount = 0;
-    layoutInfo.pushConstantRangeCount = 1;
-    layoutInfo.pPushConstantRanges = &pushConstantRange;
-    SHADOW_VK_CHECK(vkCreatePipelineLayout(m_Device, &layoutInfo, nullptr, &m_PipelineLayout));
+    if (m_PipelineLayout == VK_NULL_HANDLE)
+    {
+        VkPipelineLayoutCreateInfo layoutInfo{};
+        layoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+        layoutInfo.setLayoutCount = 0;
+        layoutInfo.pushConstantRangeCount = 1;
+        layoutInfo.pPushConstantRanges = &pushConstantRange;
+        SHADOW_VK_CHECK(vkCreatePipelineLayout(m_Device, &layoutInfo, nullptr, &m_PipelineLayout));
+    }
 
     VkGraphicsPipelineCreateInfo createInfo{};
     createInfo.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
@@ -299,10 +338,16 @@ void ShadowPass::CreatePipeline()
     createInfo.layout = m_PipelineLayout;
     createInfo.renderPass = m_RenderPass;
     createInfo.subpass = 0;
+
+    VkPipeline pipeline = VK_NULL_HANDLE;
     SHADOW_VK_CHECK(vkCreateGraphicsPipelines(m_Device, VK_NULL_HANDLE, 1, &createInfo, nullptr,
-                                               &m_Pipeline));
+                                               &pipeline));
 
     vkDestroyShaderModule(m_Device, vertModule, nullptr);
+
+    vkDeviceWaitIdle(m_Device);
+    vkDestroyPipeline(m_Device, m_Pipeline, nullptr);
+    m_Pipeline = pipeline;
 }
 
 void ShadowPass::Render(VkCommandBuffer commandBuffer, VkBuffer vertexBuffer,

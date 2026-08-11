@@ -1,5 +1,7 @@
 #include <renderer/Environment/SkyboxPass.h>
 
+#include <renderer/Pipeline/ShaderCompiler.h>
+
 #include <core/Logger.h>
 
 #include <skybox.vert.h>
@@ -10,6 +12,7 @@
 #include <cmath>
 #include <cstdlib>
 #include <cstring>
+#include <string>
 
 namespace synapse {
 namespace {
@@ -116,7 +119,16 @@ SkyboxPass::SkyboxPass(VkDevice device, VkPhysicalDevice physicalDevice, VkRende
 {
     CreateCubeMap();
     CreateDescriptors();
-    CreatePipeline(renderPass);
+
+    m_VertSourcePath = SYNAPSE_SHADER_DIR "/skybox.vert.glsl";
+    m_FragSourcePath = SYNAPSE_SHADER_DIR "/skybox.frag.glsl";
+    ShaderCompiler::GetModifiedTime(m_VertSourcePath, m_LastVertMtime);
+    ShaderCompiler::GetModifiedTime(m_FragSourcePath, m_LastFragMtime);
+    CreatePipeline(std::string_view(reinterpret_cast<const char*>(synapse::skybox_vert_data),
+                                    synapse::skybox_vert_size),
+                   std::string_view(reinterpret_cast<const char*>(synapse::skybox_frag_data),
+                                    synapse::skybox_frag_size),
+                   renderPass);
 
     SYNAPSE_CORE_INFO("Skybox created ({}x{} cube map)", kFaceSize, kFaceSize);
 }
@@ -344,22 +356,70 @@ void SkyboxPass::CreateDescriptors()
     vkUpdateDescriptorSets(m_Device, 1, &write, 0, nullptr);
 }
 
-void SkyboxPass::CreatePipeline(VkRenderPass renderPass)
+bool SkyboxPass::ReloadIfChanged()
 {
-    const auto* vertData = reinterpret_cast<const char*>(synapse::skybox_vert_data);
-    const auto* fragData = reinterpret_cast<const char*>(synapse::skybox_frag_data);
+    const auto now = std::chrono::steady_clock::now();
+    if (now - m_LastCheckTime < std::chrono::milliseconds(250))
+    {
+        return false;
+    }
+    m_LastCheckTime = now;
 
+    bool vertChanged = false;
+    bool fragChanged = false;
+    std::filesystem::file_time_type vertMtime{};
+    std::filesystem::file_time_type fragMtime{};
+
+    if (ShaderCompiler::GetModifiedTime(m_VertSourcePath, vertMtime))
+    {
+        vertChanged = vertMtime != m_LastVertMtime;
+        m_LastVertMtime = vertMtime;
+    }
+    if (ShaderCompiler::GetModifiedTime(m_FragSourcePath, fragMtime))
+    {
+        fragChanged = fragMtime != m_LastFragMtime;
+        m_LastFragMtime = fragMtime;
+    }
+    if (!vertChanged && !fragChanged)
+    {
+        return false;
+    }
+
+    std::vector<uint8_t> vertSpirv;
+    std::vector<uint8_t> fragSpirv;
+    if (!ShaderCompiler::CompileToSpirv(m_VertSourcePath, "vert", vertSpirv))
+    {
+        return false;
+    }
+    if (!ShaderCompiler::CompileToSpirv(m_FragSourcePath, "frag", fragSpirv))
+    {
+        return false;
+    }
+
+    CreatePipeline(std::string_view(reinterpret_cast<const char*>(vertSpirv.data()),
+                                    vertSpirv.size()),
+                   std::string_view(reinterpret_cast<const char*>(fragSpirv.data()),
+                                    fragSpirv.size()),
+                   m_RenderPass);
+
+    SYNAPSE_CORE_INFO("Shader hot-reload: skybox pipeline reconstruit");
+    return true;
+}
+
+void SkyboxPass::CreatePipeline(std::string_view vertSpirv, std::string_view fragSpirv,
+                                VkRenderPass renderPass)
+{
     VkShaderModule vertModule = VK_NULL_HANDLE;
     VkShaderModule fragModule = VK_NULL_HANDLE;
 
     VkShaderModuleCreateInfo moduleInfo{};
     moduleInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
-    moduleInfo.codeSize = synapse::skybox_vert_size;
-    moduleInfo.pCode = reinterpret_cast<const u32*>(vertData);
+    moduleInfo.codeSize = vertSpirv.size();
+    moduleInfo.pCode = reinterpret_cast<const u32*>(vertSpirv.data());
     SKYBOX_VK_CHECK(vkCreateShaderModule(m_Device, &moduleInfo, nullptr, &vertModule));
 
-    moduleInfo.codeSize = synapse::skybox_frag_size;
-    moduleInfo.pCode = reinterpret_cast<const u32*>(fragData);
+    moduleInfo.codeSize = fragSpirv.size();
+    moduleInfo.pCode = reinterpret_cast<const u32*>(fragSpirv.data());
     SKYBOX_VK_CHECK(vkCreateShaderModule(m_Device, &moduleInfo, nullptr, &fragModule));
 
     VkPipelineShaderStageCreateInfo stages[2]{};
@@ -413,13 +473,16 @@ void SkyboxPass::CreatePipeline(VkRenderPass renderPass)
     pushConstantRange.offset = 0;
     pushConstantRange.size = sizeof(glm::mat4);
 
-    VkPipelineLayoutCreateInfo layoutInfo{};
-    layoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-    layoutInfo.setLayoutCount = 1;
-    layoutInfo.pSetLayouts = &m_SetLayout;
-    layoutInfo.pushConstantRangeCount = 1;
-    layoutInfo.pPushConstantRanges = &pushConstantRange;
-    SKYBOX_VK_CHECK(vkCreatePipelineLayout(m_Device, &layoutInfo, nullptr, &m_PipelineLayout));
+    if (m_PipelineLayout == VK_NULL_HANDLE)
+    {
+        VkPipelineLayoutCreateInfo layoutInfo{};
+        layoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+        layoutInfo.setLayoutCount = 1;
+        layoutInfo.pSetLayouts = &m_SetLayout;
+        layoutInfo.pushConstantRangeCount = 1;
+        layoutInfo.pPushConstantRanges = &pushConstantRange;
+        SKYBOX_VK_CHECK(vkCreatePipelineLayout(m_Device, &layoutInfo, nullptr, &m_PipelineLayout));
+    }
 
     const VkDynamicState dynamicStates[] = {VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR};
 
@@ -446,11 +509,16 @@ void SkyboxPass::CreatePipeline(VkRenderPass renderPass)
     createInfo.layout = m_PipelineLayout;
     createInfo.renderPass = renderPass;
     createInfo.subpass = 0;
+    VkPipeline pipeline = VK_NULL_HANDLE;
     SKYBOX_VK_CHECK(vkCreateGraphicsPipelines(m_Device, VK_NULL_HANDLE, 1, &createInfo, nullptr,
-                                               &m_Pipeline));
+                                               &pipeline));
 
     vkDestroyShaderModule(m_Device, vertModule, nullptr);
     vkDestroyShaderModule(m_Device, fragModule, nullptr);
+
+    vkDeviceWaitIdle(m_Device);
+    vkDestroyPipeline(m_Device, m_Pipeline, nullptr);
+    m_Pipeline = pipeline;
 }
 
 void SkyboxPass::Render(VkCommandBuffer commandBuffer, VkExtent2D extent,

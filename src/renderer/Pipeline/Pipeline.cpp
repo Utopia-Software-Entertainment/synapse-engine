@@ -1,21 +1,129 @@
 #include <renderer/Pipeline/Pipeline.h>
 
+#include <renderer/Pipeline/ShaderCompiler.h>
+
 #include <core/Logger.h>
 
-#include <triangle.vert.h>
-#include <triangle.frag.h>
+#include <cstdlib>
 
 namespace synapse {
 
 Pipeline::Pipeline(VkDevice device, VkRenderPass renderPass, VkExtent2D extent,
                    const VkDescriptorSetLayout* setLayouts, u32 setLayoutCount,
                    std::string_view vertShader, std::string_view fragShader,
-                   u32 pushConstantSize)
-    : m_Device(device)
+                   u32 pushConstantSize, std::string_view vertSourcePath,
+                   std::string_view fragSourcePath)
+    : m_Device(device),
+      m_RenderPass(renderPass),
+      m_Extent(extent),
+      m_SetLayouts(setLayouts, setLayouts + setLayoutCount),
+      m_PushConstantSize(pushConstantSize),
+      m_VertSourcePath(vertSourcePath),
+      m_FragSourcePath(fragSourcePath)
 {
     VkShaderModule vertModule = CreateShaderModule(vertShader);
     VkShaderModule fragModule = CreateShaderModule(fragShader);
 
+    m_Pipeline = BuildGraphicsPipeline(vertModule, fragModule);
+    if (m_Pipeline == VK_NULL_HANDLE)
+    {
+        std::abort();
+    }
+
+    vkDestroyShaderModule(m_Device, fragModule, nullptr);
+    vkDestroyShaderModule(m_Device, vertModule, nullptr);
+
+    if (!m_VertSourcePath.empty())
+    {
+        ShaderCompiler::GetModifiedTime(m_VertSourcePath, m_LastVertMtime);
+    }
+    if (!m_FragSourcePath.empty())
+    {
+        ShaderCompiler::GetModifiedTime(m_FragSourcePath, m_LastFragMtime);
+    }
+
+    SYNAPSE_CORE_INFO("Graphics pipeline created");
+}
+
+Pipeline::~Pipeline()
+{
+    vkDestroyPipeline(m_Device, m_Pipeline, nullptr);
+    vkDestroyPipelineLayout(m_Device, m_Layout, nullptr);
+}
+
+bool Pipeline::ReloadIfChanged()
+{
+    if (m_VertSourcePath.empty() && m_FragSourcePath.empty())
+    {
+        return false;
+    }
+
+    const auto now = std::chrono::steady_clock::now();
+    if (now - m_LastCheckTime < std::chrono::milliseconds(250))
+    {
+        return false;
+    }
+    m_LastCheckTime = now;
+
+    bool vertChanged = false;
+    bool fragChanged = false;
+    std::filesystem::file_time_type vertMtime{};
+    std::filesystem::file_time_type fragMtime{};
+
+    if (!m_VertSourcePath.empty() &&
+        ShaderCompiler::GetModifiedTime(m_VertSourcePath, vertMtime))
+    {
+        vertChanged = vertMtime != m_LastVertMtime;
+        m_LastVertMtime = vertMtime;
+    }
+    if (!m_FragSourcePath.empty() &&
+        ShaderCompiler::GetModifiedTime(m_FragSourcePath, fragMtime))
+    {
+        fragChanged = fragMtime != m_LastFragMtime;
+        m_LastFragMtime = fragMtime;
+    }
+    if (!vertChanged && !fragChanged)
+    {
+        return false;
+    }
+
+    std::vector<uint8_t> vertSpirv;
+    std::vector<uint8_t> fragSpirv;
+    if (!ShaderCompiler::CompileToSpirv(m_VertSourcePath, "vert", vertSpirv))
+    {
+        return false;
+    }
+    if (!ShaderCompiler::CompileToSpirv(m_FragSourcePath, "frag", fragSpirv))
+    {
+        return false;
+    }
+
+    VkShaderModule vertModule = CreateShaderModule(
+        std::string_view(reinterpret_cast<const char*>(vertSpirv.data()), vertSpirv.size()));
+    VkShaderModule fragModule = CreateShaderModule(
+        std::string_view(reinterpret_cast<const char*>(fragSpirv.data()), fragSpirv.size()));
+
+    VkPipeline newPipeline = BuildGraphicsPipeline(vertModule, fragModule);
+    if (newPipeline == VK_NULL_HANDLE)
+    {
+        vkDestroyShaderModule(m_Device, fragModule, nullptr);
+        vkDestroyShaderModule(m_Device, vertModule, nullptr);
+        return false;
+    }
+
+    vkDeviceWaitIdle(m_Device);
+    vkDestroyPipeline(m_Device, m_Pipeline, nullptr);
+    m_Pipeline = newPipeline;
+
+    vkDestroyShaderModule(m_Device, fragModule, nullptr);
+    vkDestroyShaderModule(m_Device, vertModule, nullptr);
+
+    SYNAPSE_CORE_INFO("Shader hot-reload: pipeline principal reconstruit");
+    return true;
+}
+
+VkPipeline Pipeline::BuildGraphicsPipeline(VkShaderModule vertModule, VkShaderModule fragModule)
+{
     VkPipelineShaderStageCreateInfo stages[2]{};
     stages[0].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
     stages[0].stage = VK_SHADER_STAGE_VERTEX_BIT;
@@ -82,13 +190,13 @@ Pipeline::Pipeline(VkDevice device, VkRenderPass renderPass, VkExtent2D extent,
     VkViewport viewport{};
     viewport.x = 0.0f;
     viewport.y = 0.0f;
-    viewport.width = static_cast<float>(extent.width);
-    viewport.height = static_cast<float>(extent.height);
+    viewport.width = static_cast<float>(m_Extent.width);
+    viewport.height = static_cast<float>(m_Extent.height);
     viewport.minDepth = 0.0f;
     viewport.maxDepth = 1.0f;
 
     VkRect2D scissor{};
-    scissor.extent = extent;
+    scissor.extent = m_Extent;
 
     VkPipelineViewportStateCreateInfo viewportState{};
     viewportState.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
@@ -132,19 +240,22 @@ Pipeline::Pipeline(VkDevice device, VkRenderPass renderPass, VkExtent2D extent,
     VkPushConstantRange pushConstantRange{};
     pushConstantRange.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
     pushConstantRange.offset = 0;
-    pushConstantRange.size = pushConstantSize;
+    pushConstantRange.size = m_PushConstantSize;
 
-    VkPipelineLayoutCreateInfo layoutInfo{};
-    layoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-    layoutInfo.setLayoutCount = setLayoutCount;
-    layoutInfo.pSetLayouts = setLayouts;
-    layoutInfo.pushConstantRangeCount = pushConstantSize > 0 ? 1u : 0u;
-    layoutInfo.pPushConstantRanges = pushConstantSize > 0 ? &pushConstantRange : nullptr;
-
-    if (vkCreatePipelineLayout(m_Device, &layoutInfo, nullptr, &m_Layout) != VK_SUCCESS)
+    if (m_Layout == VK_NULL_HANDLE)
     {
-        SYNAPSE_CORE_CRITICAL("Failed to create pipeline layout");
-        std::abort();
+        VkPipelineLayoutCreateInfo layoutInfo{};
+        layoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+        layoutInfo.setLayoutCount = static_cast<u32>(m_SetLayouts.size());
+        layoutInfo.pSetLayouts = m_SetLayouts.data();
+        layoutInfo.pushConstantRangeCount = m_PushConstantSize > 0 ? 1u : 0u;
+        layoutInfo.pPushConstantRanges = m_PushConstantSize > 0 ? &pushConstantRange : nullptr;
+
+        if (vkCreatePipelineLayout(m_Device, &layoutInfo, nullptr, &m_Layout) != VK_SUCCESS)
+        {
+            SYNAPSE_CORE_CRITICAL("Failed to create pipeline layout");
+            return VK_NULL_HANDLE;
+        }
     }
 
     VkGraphicsPipelineCreateInfo createInfo{};
@@ -159,25 +270,17 @@ Pipeline::Pipeline(VkDevice device, VkRenderPass renderPass, VkExtent2D extent,
     createInfo.pDepthStencilState = &depthStencil;
     createInfo.pColorBlendState = &colorBlending;
     createInfo.layout = m_Layout;
-    createInfo.renderPass = renderPass;
+    createInfo.renderPass = m_RenderPass;
     createInfo.subpass = 0;
 
-    if (vkCreateGraphicsPipelines(m_Device, VK_NULL_HANDLE, 1, &createInfo, nullptr, &m_Pipeline) != VK_SUCCESS)
+    VkPipeline pipeline = VK_NULL_HANDLE;
+    if (vkCreateGraphicsPipelines(m_Device, VK_NULL_HANDLE, 1, &createInfo, nullptr, &pipeline) !=
+        VK_SUCCESS)
     {
         SYNAPSE_CORE_CRITICAL("Failed to create graphics pipeline");
-        std::abort();
+        return VK_NULL_HANDLE;
     }
-
-    vkDestroyShaderModule(m_Device, fragModule, nullptr);
-    vkDestroyShaderModule(m_Device, vertModule, nullptr);
-
-    SYNAPSE_CORE_INFO("Graphics pipeline created");
-}
-
-Pipeline::~Pipeline()
-{
-    vkDestroyPipeline(m_Device, m_Pipeline, nullptr);
-    vkDestroyPipelineLayout(m_Device, m_Layout, nullptr);
+    return pipeline;
 }
 
 VkShaderModule Pipeline::CreateShaderModule(std::string_view spirvBytes) const

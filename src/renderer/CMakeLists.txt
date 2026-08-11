@@ -31,6 +31,8 @@ target_link_libraries(synapse_renderer PUBLIC
     fastgltf
 )
 target_include_directories(synapse_renderer PUBLIC ${CMAKE_SOURCE_DIR}/src)
+target_compile_definitions(synapse_renderer PRIVATE
+    SYNAPSE_SHADER_DIR="${CMAKE_CURRENT_SOURCE_DIR}/Shaders")
 target_link_libraries(synapse_renderer PRIVATE
     VulkanMemoryAllocator
 )

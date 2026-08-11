@@ -8,6 +8,10 @@
 
 #include <vulkan/vulkan.h>
 
+#include <chrono>
+#include <filesystem>
+#include <string>
+#include <string_view>
 #include <vector>
 
 namespace synapse {
@@ -25,6 +29,8 @@ public:
     VkImageView GetImageView() const { return m_ImageView; }
     VkSampler GetSampler() const { return m_Sampler; }
 
+    bool ReloadIfChanged();
+
     void Render(VkCommandBuffer commandBuffer, VkBuffer vertexBuffer, VkBuffer indexBuffer,
                 VkBuffer instanceBuffer, const std::vector<DrawItem>& items,
                 const glm::mat4& lightViewProj);
@@ -34,7 +40,7 @@ private:
     void CreateSampler();
     void CreateRenderPass();
     void CreateFramebuffer();
-    void CreatePipeline();
+    void CreatePipeline(std::string_view vertSpirv);
 
     VkDevice m_Device = VK_NULL_HANDLE;
     VkPhysicalDevice m_PhysicalDevice = VK_NULL_HANDLE;
@@ -49,6 +55,10 @@ private:
     VkFramebuffer m_Framebuffer = VK_NULL_HANDLE;
     VkPipelineLayout m_PipelineLayout = VK_NULL_HANDLE;
     VkPipeline m_Pipeline = VK_NULL_HANDLE;
+
+    std::string m_VertSourcePath;
+    std::filesystem::file_time_type m_LastVertMtime;
+    std::chrono::steady_clock::time_point m_LastCheckTime;
 };
 
 } // namespace synapse

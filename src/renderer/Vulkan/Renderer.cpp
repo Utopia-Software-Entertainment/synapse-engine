@@ -744,7 +744,7 @@ void Renderer::RecreatePipeline()
                          synapse::triangle_vert_size),
         std::string_view(reinterpret_cast<const char*>(synapse::triangle_frag_data) + 0,
                          synapse::triangle_frag_size),
-        0);
+        0, SYNAPSE_SHADER_DIR "/triangle.vert.glsl", SYNAPSE_SHADER_DIR "/triangle.frag.glsl");
 }
 
 void Renderer::CreateInstance()
@@ -1205,6 +1205,10 @@ void Renderer::Draw()
 
     VK_CHECK(vkWaitForFences(m_Device, 1, &frame.inFlight, VK_TRUE, UINT64_MAX));
     VK_CHECK(vkResetFences(m_Device, 1, &frame.inFlight));
+
+    m_Pipeline->ReloadIfChanged();
+    m_ShadowPass->ReloadIfChanged();
+    m_SkyboxPass->ReloadIfChanged();
 
     u32 imageIndex = 0;
     VkResult acquireResult = vkAcquireNextImageKHR(m_Device, m_Swapchain, UINT64_MAX,
