@@ -116,11 +116,11 @@ int main()
         }
         if (glfwGetKey(handle, GLFW_KEY_LEFT) == GLFW_PRESS)
         {
-            camera.Rotate(lookSpeed, 0.0f);
+            camera.Rotate(-lookSpeed, 0.0f);
         }
         if (glfwGetKey(handle, GLFW_KEY_RIGHT) == GLFW_PRESS)
         {
-            camera.Rotate(-lookSpeed, 0.0f);
+            camera.Rotate(lookSpeed, 0.0f);
         }
         if (glfwGetKey(handle, GLFW_KEY_UP) == GLFW_PRESS)
         {
@@ -141,8 +141,8 @@ int main()
             firstMouse = false;
         }
         const float mouseSensitivity = 0.12f;
-        camera.Rotate(static_cast<float>(lastMouseX - mouseX) * mouseSensitivity,
-                      static_cast<float>(mouseY - lastMouseY) * mouseSensitivity);
+        camera.Rotate(static_cast<float>(mouseX - lastMouseX) * mouseSensitivity,
+                      static_cast<float>(lastMouseY - mouseY) * mouseSensitivity);
         lastMouseX = mouseX;
         lastMouseY = mouseY;
 
