@@ -16,6 +16,13 @@ namespace synapse {
 class Pipeline;
 class Window;
 
+struct DrawItem
+{
+    glm::mat4 model = glm::mat4(1.0f);
+    u32 firstIndex = 0;
+    u32 indexCount = 0;
+};
+
 class Renderer
 {
 public:
@@ -28,7 +35,7 @@ public:
     void Draw();
     void SetClearColor(glm::vec3 color);
     void SetViewProjection(glm::mat4 view, glm::mat4 proj);
-    void SetModelMatrix(glm::mat4 model);
+    void SetDrawItems(std::vector<DrawItem> items);
 
 private:
     struct Frame
@@ -47,7 +54,6 @@ private:
     {
         glm::mat4 view;
         glm::mat4 proj;
-        glm::mat4 model;
     };
 
     void CreateInstance();
@@ -62,11 +68,17 @@ private:
     void CreateSyncObjects();
     void CreateVertexBuffer();
     void CreateIndexBuffer();
+    void CreateTexture();
     void CreateDescriptorObjects();
     void RecreatePipeline();
     void CleanupSwapchain();
     void CleanupDepthResources();
     void CleanupDescriptorObjects();
+    void CleanupTexture();
+    VkBuffer CreateDeviceBuffer(u32 size, VkBufferUsageFlags usage, const void* data,
+                                VkDeviceMemory* outMemory);
+    VkCommandBuffer BeginSingleTimeCommands();
+    void EndSingleTimeCommands(VkCommandBuffer commandBuffer);
     void RecordCommandBuffer(Frame& frame, u32 imageIndex);
 
     Window& m_Window;
@@ -107,9 +119,13 @@ private:
 
     VkDescriptorSetLayout m_DescriptorSetLayout = VK_NULL_HANDLE;
     VkDescriptorPool m_DescriptorPool = VK_NULL_HANDLE;
+    VkImage m_TextureImage = VK_NULL_HANDLE;
+    VkDeviceMemory m_TextureMemory = VK_NULL_HANDLE;
+    VkImageView m_TextureImageView = VK_NULL_HANDLE;
+    VkSampler m_TextureSampler = VK_NULL_HANDLE;
+    std::vector<DrawItem> m_DrawItems;
     glm::mat4 m_View = glm::mat4(1.0f);
     glm::mat4 m_Projection = glm::mat4(1.0f);
-    glm::mat4 m_Model = glm::mat4(1.0f);
 };
 
 } // namespace synapse

@@ -2,6 +2,8 @@
 
 #include <core/Types.h>
 
+#include <glm/glm.hpp>
+
 #include <vulkan/vulkan.h>
 
 #include <string>
