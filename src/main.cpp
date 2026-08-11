@@ -1,5 +1,7 @@
 #include <core/Engine.h>
 #include <core/Types.h>
+#include <physics/Jolt/PhysicsWorld.h>
+#include <physics/Jolt/RigidBody.h>
 #include <platform/Window.h>
 #include <renderer/Camera/Camera.h>
 #include <renderer/Mesh/Mesh.h>
@@ -11,6 +13,7 @@
 #include <glm/gtc/constants.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 
+#include <array>
 #include <chrono>
 #include <cmath>
 #include <vector>
@@ -56,6 +59,48 @@ int main()
     const uint32_t kSphereFirstIndex = kFloorFirstIndex + kFloorIndexCount;
     const uint32_t kSphereIndexCount = static_cast<uint32_t>(sphere.indices.size());
 
+    synapse::physics::PhysicsWorld world;
+
+    synapse::physics::ShapeDesc floorShape;
+    floorShape.halfExtent = glm::vec3(6.0f, 0.5f, 6.0f);
+    synapse::physics::RigidBody floorBody(world, floorShape, glm::vec3(0.0f, -1.5f, 0.0f),
+                                          glm::quat(1.0f, 0.0f, 0.0f, 0.0f),
+                                          synapse::physics::MotionType::Static);
+
+    synapse::physics::RigidBody cubeBody(world, synapse::physics::ShapeDesc{},
+                                         glm::vec3(0.0f, 0.5f, 0.0f));
+
+    synapse::physics::ShapeDesc sphereShape;
+    sphereShape.kind = synapse::physics::ShapeKind::Sphere;
+    sphereShape.radius = 0.5f;
+    synapse::physics::RigidBody sphereBody(world, sphereShape, glm::vec3(0.0f, 2.5f, 0.0f));
+
+    std::array<synapse::physics::RigidBody, 6> orbitBodies{
+        synapse::physics::RigidBody(world, synapse::physics::ShapeDesc{},
+                                    glm::vec3(std::cos(0.0f) * 2.2f, 2.0f, std::sin(0.0f) * 2.2f)),
+        synapse::physics::RigidBody(world, synapse::physics::ShapeDesc{},
+                                    glm::vec3(std::cos(glm::two_pi<float>() / 6.0f) * 2.2f, 2.5f,
+                                              std::sin(glm::two_pi<float>() / 6.0f) * 2.2f)),
+        synapse::physics::RigidBody(world, synapse::physics::ShapeDesc{},
+                                    glm::vec3(std::cos(2.0f * glm::two_pi<float>() / 6.0f) * 2.2f, 3.0f,
+                                              std::sin(2.0f * glm::two_pi<float>() / 6.0f) * 2.2f)),
+        synapse::physics::RigidBody(world, synapse::physics::ShapeDesc{},
+                                    glm::vec3(std::cos(3.0f * glm::two_pi<float>() / 6.0f) * 2.2f, 3.5f,
+                                              std::sin(3.0f * glm::two_pi<float>() / 6.0f) * 2.2f)),
+        synapse::physics::RigidBody(world, synapse::physics::ShapeDesc{},
+                                    glm::vec3(std::cos(4.0f * glm::two_pi<float>() / 6.0f) * 2.2f, 4.0f,
+                                              std::sin(4.0f * glm::two_pi<float>() / 6.0f) * 2.2f)),
+        synapse::physics::RigidBody(world, synapse::physics::ShapeDesc{},
+                                    glm::vec3(std::cos(5.0f * glm::two_pi<float>() / 6.0f) * 2.2f, 4.5f,
+                                              std::sin(5.0f * glm::two_pi<float>() / 6.0f) * 2.2f)),
+    };
+    for (uint32_t i = 0; i < 6; ++i)
+    {
+        const float angle = static_cast<float>(i) * glm::two_pi<float>() / 6.0f;
+        orbitBodies[i].SetLinearVelocity(
+            glm::vec3(-std::sin(angle) * 1.5f, 0.0f, std::cos(angle) * 1.5f));
+    }
+
     engine.Start();
 
     const glm::vec3 lightDir = glm::normalize(glm::vec3(0.3f, 1.0f, 0.4f));
@@ -65,7 +110,6 @@ int main()
     const glm::mat4 lightViewProj = lightProj * lightView;
 
     auto lastTime = std::chrono::steady_clock::now();
-    const auto startTime = lastTime;
 
     GLFWwindow* handle = window.GetHandle();
     glfwSetInputMode(handle, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
@@ -148,34 +192,27 @@ int main()
 
         camera.SetAspectRatio(static_cast<float>(window.GetWidth()) / static_cast<float>(window.GetHeight()));
 
-        const float elapsed = std::chrono::duration<float>(
-            std::chrono::steady_clock::now() - startTime).count();
+        world.Step(std::min(deltaTime, 1.0f / 30.0f));
 
         std::vector<glm::mat4> transforms;
         std::vector<synapse::DrawItem> items;
         transforms.reserve(9);
         items.reserve(4);
 
-        transforms.push_back(glm::mat4(1.0f));
+        transforms.push_back(floorBody.GetModelMatrix());
         items.push_back({kFloorFirstIndex, kFloorIndexCount, 0, 1});
 
-        transforms.push_back(glm::rotate(glm::mat4(1.0f), elapsed * 0.5f, glm::vec3(0.0f, 1.0f, 0.0f)));
+        transforms.push_back(cubeBody.GetModelMatrix());
         items.push_back({kCubeFirstIndex, kCubeIndexCount, 1, 1});
 
-        transforms.push_back(glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 1.3f, 0.0f)) *
-                             glm::rotate(glm::mat4(1.0f), elapsed * 0.3f, glm::vec3(0.0f, 1.0f, 0.0f)));
+        transforms.push_back(sphereBody.GetModelMatrix());
         items.push_back({kSphereFirstIndex, kSphereIndexCount, 2, 1});
 
-        constexpr uint32_t kOrbitalInstanceOffset = 3;
-        for (uint32_t i = 0; i < 6; ++i)
+        for (const auto& body : orbitBodies)
         {
-            const float angle = elapsed * 0.9f + static_cast<float>(i) * glm::two_pi<float>() / 6.0f;
-            glm::mat4 model = glm::translate(glm::mat4(1.0f), glm::vec3(
-                std::cos(angle) * 2.2f, 0.4f, std::sin(angle) * 2.2f));
-            model = model * glm::rotate(glm::mat4(1.0f), elapsed * 1.5f, glm::vec3(0.0f, 1.0f, 0.0f));
-            transforms.push_back(model);
+            transforms.push_back(body.GetModelMatrix());
         }
-        items.push_back({kCubeFirstIndex, kCubeIndexCount, kOrbitalInstanceOffset, 6});
+        items.push_back({kCubeFirstIndex, kCubeIndexCount, 3, 6});
 
         renderer.SetInstanceTransforms(transforms.data(), static_cast<uint32_t>(transforms.size()));
         renderer.SetDrawItems(std::move(items));
