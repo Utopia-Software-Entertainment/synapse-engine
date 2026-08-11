@@ -5,6 +5,8 @@
 
 #include <GLFW/glfw3.h>
 
+#include <glm/gtc/matrix_transform.hpp>
+
 #include <chrono>
 #include <cmath>
 
@@ -20,6 +22,7 @@ int main()
     engine.Start();
 
     auto lastTime = std::chrono::steady_clock::now();
+    const auto startTime = lastTime;
 
     while (engine.Running() && !window.ShouldClose())
     {
@@ -66,6 +69,12 @@ int main()
         }
 
         camera.SetAspectRatio(static_cast<float>(window.GetWidth()) / static_cast<float>(window.GetHeight()));
+
+        const float elapsed = std::chrono::duration<float>(
+            std::chrono::steady_clock::now() - startTime).count();
+        const glm::mat4 model = glm::rotate(glm::mat4(1.0f), elapsed * 0.5f, glm::vec3(0.0f, 1.0f, 0.0f));
+
+        renderer.SetModelMatrix(model);
         renderer.SetViewProjection(camera.GetViewMatrix(), camera.GetProjectionMatrix());
         renderer.Draw();
         engine.TickFrame();

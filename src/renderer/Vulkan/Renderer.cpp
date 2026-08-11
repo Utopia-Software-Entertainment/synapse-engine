@@ -93,6 +93,11 @@ void Renderer::SetViewProjection(glm::mat4 view, glm::mat4 proj)
     m_Projection = proj;
 }
 
+void Renderer::SetModelMatrix(glm::mat4 model)
+{
+    m_Model = model;
+}
+
 void Renderer::CreateDescriptorObjects()
 {
     VkDescriptorSetLayoutBinding binding{};
@@ -611,7 +616,7 @@ void Renderer::Draw()
     }
     VK_CHECK(acquireResult);
 
-    const CameraUBO ubo{m_View, m_Projection};
+    const CameraUBO ubo{m_View, m_Projection, m_Model};
     std::memcpy(frame.uboMapped, &ubo, sizeof(ubo));
 
     VK_CHECK(vkResetCommandBuffer(frame.commandBuffer, 0));

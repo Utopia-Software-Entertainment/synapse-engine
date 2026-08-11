@@ -28,6 +28,7 @@ public:
     void Draw();
     void SetClearColor(glm::vec3 color);
     void SetViewProjection(glm::mat4 view, glm::mat4 proj);
+    void SetModelMatrix(glm::mat4 model);
 
 private:
     struct Frame
@@ -46,6 +47,7 @@ private:
     {
         glm::mat4 view;
         glm::mat4 proj;
+        glm::mat4 model;
     };
 
     void CreateInstance();
@@ -97,6 +99,7 @@ private:
     VkDescriptorPool m_DescriptorPool = VK_NULL_HANDLE;
     glm::mat4 m_View = glm::mat4(1.0f);
     glm::mat4 m_Projection = glm::mat4(1.0f);
+    glm::mat4 m_Model = glm::mat4(1.0f);
 };
 
 } // namespace synapse
