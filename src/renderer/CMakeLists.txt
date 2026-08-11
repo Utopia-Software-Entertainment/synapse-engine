@@ -46,6 +46,7 @@ file(MAKE_DIRECTORY ${SHADER_OUT_DIR})
 set(SHADER_LIST
     triangle.vert
     triangle.frag
+    shadow.vert
 )
 
 set(SHADER_OUTPUTS "")

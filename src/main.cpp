@@ -3,6 +3,7 @@
 #include <platform/Window.h>
 #include <renderer/Camera/Camera.h>
 #include <renderer/Mesh/Mesh.h>
+#include <renderer/Mesh/MeshLoader.h>
 #include <renderer/Vulkan/Renderer.h>
 
 #include <GLFW/glfw3.h>
@@ -56,6 +57,12 @@ int main()
     const uint32_t kSphereIndexCount = static_cast<uint32_t>(sphere.indices.size());
 
     engine.Start();
+
+    const glm::vec3 lightDir = glm::normalize(glm::vec3(0.3f, 1.0f, 0.4f));
+    const glm::mat4 lightView = glm::lookAt(-lightDir * 8.0f, glm::vec3(0.0f, 0.0f, 0.0f),
+                                            glm::vec3(0.0f, 1.0f, 0.0f));
+    const glm::mat4 lightProj = glm::ortho(-8.0f, 8.0f, -8.0f, 8.0f, 0.1f, 30.0f);
+    const glm::mat4 lightViewProj = lightProj * lightView;
 
     auto lastTime = std::chrono::steady_clock::now();
     const auto startTime = lastTime;
@@ -137,6 +144,7 @@ int main()
 
         renderer.SetDrawItems(std::move(items));
         renderer.SetViewProjection(camera.GetViewMatrix(), camera.GetProjectionMatrix());
+        renderer.SetLightViewProjection(lightViewProj);
         renderer.Draw();
         engine.TickFrame();
     }

@@ -1,5 +1,6 @@
 #include <renderer/Vulkan/Renderer.h>
 #include <renderer/Pipeline/Pipeline.h>
+#include <renderer/Shadow/ShadowPass.h>
 #include <platform/Window.h>
 
 #include <triangle.vert.h>
@@ -47,6 +48,7 @@ Renderer::Renderer(Window& window, u32 width, u32 height)
     CreateFramebuffers();
     CreateCommandBuffers();
     CreateSyncObjects();
+    m_ShadowPass = std::make_unique<ShadowPass>(m_Device, m_PhysicalDevice, m_DepthFormat);
     CreateTexture();
     CreateDescriptorObjects();
     RecreatePipeline();
@@ -62,6 +64,7 @@ Renderer::~Renderer()
 
     m_Pipeline.reset();
     CleanupDescriptorObjects();
+    m_ShadowPass.reset();
 
     vkDestroyBuffer(m_Device, m_VertexBuffer, nullptr);
     vkFreeMemory(m_Device, m_VertexBufferMemory, nullptr);
@@ -99,6 +102,11 @@ void Renderer::SetViewProjection(glm::mat4 view, glm::mat4 proj)
     m_Projection = proj;
 }
 
+void Renderer::SetLightViewProjection(glm::mat4 lightViewProj)
+{
+    m_LightVP = lightViewProj;
+}
+
 void Renderer::SetDrawItems(std::vector<DrawItem> items)
 {
     m_DrawItems = std::move(items);
@@ -122,20 +130,34 @@ void Renderer::CreateDescriptorObjects()
     layoutInfo.pBindings = bindings;
     VK_CHECK(vkCreateDescriptorSetLayout(m_Device, &layoutInfo, nullptr, &m_DescriptorSetLayout));
 
+    VkDescriptorSetLayoutBinding shadowBinding{};
+    shadowBinding.binding = 0;
+    shadowBinding.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+    shadowBinding.descriptorCount = 1;
+    shadowBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+
+    VkDescriptorSetLayoutCreateInfo shadowLayoutInfo{};
+    shadowLayoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+    shadowLayoutInfo.bindingCount = 1;
+    shadowLayoutInfo.pBindings = &shadowBinding;
+    VK_CHECK(vkCreateDescriptorSetLayout(m_Device, &shadowLayoutInfo, nullptr, &m_ShadowSetLayout));
+
     VkDescriptorPoolSize poolSizes[2]{};
     poolSizes[0].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
     poolSizes[0].descriptorCount = kMaxFramesInFlight;
     poolSizes[1].type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-    poolSizes[1].descriptorCount = kMaxFramesInFlight;
+    poolSizes[1].descriptorCount = kMaxFramesInFlight * 2;
 
     VkDescriptorPoolCreateInfo poolInfo{};
     poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
     poolInfo.poolSizeCount = 2;
     poolInfo.pPoolSizes = poolSizes;
-    poolInfo.maxSets = kMaxFramesInFlight;
+    poolInfo.maxSets = kMaxFramesInFlight * 2;
     VK_CHECK(vkCreateDescriptorPool(m_Device, &poolInfo, nullptr, &m_DescriptorPool));
 
     VkDeviceSize bufferSize = sizeof(CameraUBO);
+
+    VkDescriptorSetLayout allLayouts[] = {m_DescriptorSetLayout, m_ShadowSetLayout};
 
     std::vector<VkDescriptorSetLayout> layouts(kMaxFramesInFlight, m_DescriptorSetLayout);
     VkDescriptorSetAllocateInfo allocInfo{};
@@ -146,6 +168,12 @@ void Renderer::CreateDescriptorObjects()
 
     std::vector<VkDescriptorSet> sets(kMaxFramesInFlight);
     VK_CHECK(vkAllocateDescriptorSets(m_Device, &allocInfo, sets.data()));
+
+    std::vector<VkDescriptorSetLayout> shadowLayouts(kMaxFramesInFlight, m_ShadowSetLayout);
+    allocInfo.pSetLayouts = shadowLayouts.data();
+
+    std::vector<VkDescriptorSet> shadowSets(kMaxFramesInFlight);
+    VK_CHECK(vkAllocateDescriptorSets(m_Device, &allocInfo, shadowSets.data()));
 
     for (u32 i = 0; i < kMaxFramesInFlight; ++i)
     {
@@ -183,6 +211,7 @@ void Renderer::CreateDescriptorObjects()
         VK_CHECK(vkMapMemory(m_Device, m_Frames[i].uboMemory, 0, bufferSize, 0, &m_Frames[i].uboMapped));
 
         m_Frames[i].descriptorSet = sets[i];
+        m_Frames[i].shadowDescriptorSet = shadowSets[i];
 
         VkDescriptorBufferInfo bufferDescriptor{};
         bufferDescriptor.buffer = m_Frames[i].uboBuffer;
@@ -194,7 +223,12 @@ void Renderer::CreateDescriptorObjects()
         imageDescriptor.imageView = m_TextureImageView;
         imageDescriptor.sampler = m_TextureSampler;
 
-        VkWriteDescriptorSet writes[2]{};
+        VkDescriptorImageInfo shadowDescriptor{};
+        shadowDescriptor.imageLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL;
+        shadowDescriptor.imageView = m_ShadowPass->GetImageView();
+        shadowDescriptor.sampler = m_ShadowPass->GetSampler();
+
+        VkWriteDescriptorSet writes[3]{};
         writes[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
         writes[0].dstSet = m_Frames[i].descriptorSet;
         writes[0].dstBinding = 0;
@@ -207,10 +241,17 @@ void Renderer::CreateDescriptorObjects()
         writes[1].descriptorCount = 1;
         writes[1].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
         writes[1].pImageInfo = &imageDescriptor;
-        vkUpdateDescriptorSets(m_Device, 2, writes, 0, nullptr);
+        writes[2].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        writes[2].dstSet = m_Frames[i].shadowDescriptorSet;
+        writes[2].dstBinding = 0;
+        writes[2].descriptorCount = 1;
+        writes[2].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+        writes[2].pImageInfo = &shadowDescriptor;
+        vkUpdateDescriptorSets(m_Device, 3, writes, 0, nullptr);
     }
 
-    SYNAPSE_CORE_INFO("Descriptor objects created ({} UBO + texture sets)", kMaxFramesInFlight);
+    SYNAPSE_CORE_INFO("Descriptor objects created ({} UBO + {} texture + {} shadow sets)",
+                      kMaxFramesInFlight, kMaxFramesInFlight, kMaxFramesInFlight);
 }
 
 void Renderer::CleanupDescriptorObjects()
@@ -219,6 +260,11 @@ void Renderer::CleanupDescriptorObjects()
     {
         vkDestroyDescriptorPool(m_Device, m_DescriptorPool, nullptr);
         m_DescriptorPool = VK_NULL_HANDLE;
+    }
+    if (m_ShadowSetLayout != VK_NULL_HANDLE)
+    {
+        vkDestroyDescriptorSetLayout(m_Device, m_ShadowSetLayout, nullptr);
+        m_ShadowSetLayout = VK_NULL_HANDLE;
     }
     if (m_DescriptorSetLayout != VK_NULL_HANDLE)
     {
@@ -560,13 +606,15 @@ void Renderer::CleanupTexture()
 
 void Renderer::RecreatePipeline()
 {
+    const VkDescriptorSetLayout layouts[] = {m_DescriptorSetLayout, m_ShadowSetLayout};
+
     m_Pipeline = std::make_unique<Pipeline>(
-        m_Device, m_RenderPass, m_SwapchainExtent, m_DescriptorSetLayout,
+        m_Device, m_RenderPass, m_SwapchainExtent, layouts, 2,
         std::string_view(reinterpret_cast<const char*>(synapse::triangle_vert_data) +
-                            0,
+                             0,
                          synapse::triangle_vert_size),
         std::string_view(reinterpret_cast<const char*>(synapse::triangle_frag_data) +
-                            0,
+                             0,
                          synapse::triangle_frag_size));
 }
 
@@ -1027,6 +1075,17 @@ void Renderer::Draw()
     beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
     VK_CHECK(vkBeginCommandBuffer(frame.commandBuffer, &beginInfo));
 
+    m_ShadowPass->Render(frame.commandBuffer, m_VertexBuffer, m_IndexBuffer, m_DrawItems,
+                         m_LightVP);
+
+    VkMemoryBarrier shadowBarrier{};
+    shadowBarrier.sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER;
+    shadowBarrier.srcAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+    shadowBarrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+    vkCmdPipelineBarrier(frame.commandBuffer, VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT,
+                         VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0, 1, &shadowBarrier, 0, nullptr,
+                         0, nullptr);
+
     VkClearValue clearValues[2]{};
     clearValues[0].color = {{m_ClearColor.r, m_ClearColor.g, m_ClearColor.b, 1.0f}};
     clearValues[1].depthStencil = {1.0f, 0};
@@ -1042,8 +1101,9 @@ void Renderer::Draw()
     vkCmdBeginRenderPass(frame.commandBuffer, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
 
     vkCmdBindPipeline(frame.commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_Pipeline->GetHandle());
+    const VkDescriptorSet sets[] = {frame.descriptorSet, frame.shadowDescriptorSet};
     vkCmdBindDescriptorSets(frame.commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS,
-                            m_Pipeline->GetLayout(), 0, 1, &frame.descriptorSet, 0, nullptr);
+                            m_Pipeline->GetLayout(), 0, 2, sets, 0, nullptr);
 
     VkDeviceSize offset = 0;
     vkCmdBindVertexBuffers(frame.commandBuffer, 0, 1, &m_VertexBuffer, &offset);

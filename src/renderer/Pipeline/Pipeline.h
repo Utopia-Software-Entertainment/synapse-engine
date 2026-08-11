@@ -14,7 +14,7 @@ class Pipeline
 {
 public:
     Pipeline(VkDevice device, VkRenderPass renderPass, VkExtent2D extent,
-             VkDescriptorSetLayout descriptorSetLayout,
+             const VkDescriptorSetLayout* setLayouts, u32 setLayoutCount,
              std::string_view vertShader, std::string_view fragShader);
     ~Pipeline();
 

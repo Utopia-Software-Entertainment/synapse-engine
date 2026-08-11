@@ -1,15 +1,15 @@
 #pragma once
 
+#include <renderer/Mesh/Mesh.h>
+
+#include <string_view>
+
 namespace synapse {
 
 class MeshLoader
 {
 public:
-    MeshLoader() = default;
-    ~MeshLoader() = default;
-
-    MeshLoader(const MeshLoader&) = delete;
-    MeshLoader& operator=(const MeshLoader&) = delete;
+    static Mesh LoadObj(std::string_view filepath);
 };
 
 } // namespace synapse

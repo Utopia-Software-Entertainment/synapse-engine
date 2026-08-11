@@ -4,7 +4,6 @@
 
 #include <glm/glm.hpp>
 
-#include <string_view>
 #include <vector>
 
 namespace synapse {
@@ -25,11 +24,5 @@ struct Mesh
 
 Mesh CreateCube();
 Mesh CreateFloor();
-
-class MeshLoader
-{
-public:
-    static Mesh LoadObj(std::string_view filepath);
-};
 
 } // namespace synapse

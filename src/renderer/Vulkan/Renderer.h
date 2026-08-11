@@ -1,5 +1,7 @@
 #pragma once
 
+#include <renderer/Vulkan/DrawItem.h>
+
 #include <core/Types.h>
 #include <renderer/Mesh/Mesh.h>
 
@@ -15,14 +17,8 @@ struct GLFWwindow;
 namespace synapse {
 
 class Pipeline;
+class ShadowPass;
 class Window;
-
-struct DrawItem
-{
-    glm::mat4 model = glm::mat4(1.0f);
-    u32 firstIndex = 0;
-    u32 indexCount = 0;
-};
 
 class Renderer
 {
@@ -36,6 +32,7 @@ public:
     void Draw();
     void SetClearColor(glm::vec3 color);
     void SetViewProjection(glm::mat4 view, glm::mat4 proj);
+    void SetLightViewProjection(glm::mat4 lightViewProj);
     void SetDrawItems(std::vector<DrawItem> items);
     void SetGeometry(const Mesh& mesh);
 
@@ -49,6 +46,7 @@ private:
         VkBuffer uboBuffer = VK_NULL_HANDLE;
         VkDeviceMemory uboMemory = VK_NULL_HANDLE;
         VkDescriptorSet descriptorSet = VK_NULL_HANDLE;
+        VkDescriptorSet shadowDescriptorSet = VK_NULL_HANDLE;
         void* uboMapped = nullptr;
     };
 
@@ -56,6 +54,7 @@ private:
     {
         glm::mat4 view;
         glm::mat4 proj;
+        glm::mat4 lightVP;
     };
 
     void CreateInstance();
@@ -110,6 +109,7 @@ private:
     u32 m_FrameIndex = 0;
 
     std::unique_ptr<Pipeline> m_Pipeline;
+    std::unique_ptr<ShadowPass> m_ShadowPass;
     VkBuffer m_VertexBuffer = VK_NULL_HANDLE;
     VkDeviceMemory m_VertexBufferMemory = VK_NULL_HANDLE;
     u32 m_VertexCount = 0;
@@ -118,6 +118,7 @@ private:
     u32 m_IndexCount = 0;
 
     VkDescriptorSetLayout m_DescriptorSetLayout = VK_NULL_HANDLE;
+    VkDescriptorSetLayout m_ShadowSetLayout = VK_NULL_HANDLE;
     VkDescriptorPool m_DescriptorPool = VK_NULL_HANDLE;
     VkImage m_TextureImage = VK_NULL_HANDLE;
     VkDeviceMemory m_TextureMemory = VK_NULL_HANDLE;
@@ -126,6 +127,7 @@ private:
     std::vector<DrawItem> m_DrawItems;
     glm::mat4 m_View = glm::mat4(1.0f);
     glm::mat4 m_Projection = glm::mat4(1.0f);
+    glm::mat4 m_LightVP = glm::mat4(1.0f);
 };
 
 } // namespace synapse
