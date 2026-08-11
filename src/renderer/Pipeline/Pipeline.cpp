@@ -9,7 +9,8 @@ namespace synapse {
 
 Pipeline::Pipeline(VkDevice device, VkRenderPass renderPass, VkExtent2D extent,
                    const VkDescriptorSetLayout* setLayouts, u32 setLayoutCount,
-                   std::string_view vertShader, std::string_view fragShader)
+                   std::string_view vertShader, std::string_view fragShader,
+                   u32 pushConstantSize)
     : m_Device(device)
 {
     VkShaderModule vertModule = CreateShaderModule(vertShader);
@@ -25,12 +26,15 @@ Pipeline::Pipeline(VkDevice device, VkRenderPass renderPass, VkExtent2D extent,
     stages[1].module = fragModule;
     stages[1].pName = "main";
 
-    VkVertexInputBindingDescription binding{};
-    binding.binding = 0;
-    binding.stride = 11 * sizeof(float);
-    binding.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
+    VkVertexInputBindingDescription bindings[2]{};
+    bindings[0].binding = 0;
+    bindings[0].stride = 11 * sizeof(float);
+    bindings[0].inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
+    bindings[1].binding = 1;
+    bindings[1].stride = sizeof(glm::mat4);
+    bindings[1].inputRate = VK_VERTEX_INPUT_RATE_INSTANCE;
 
-    VkVertexInputAttributeDescription attributes[4]{};
+    VkVertexInputAttributeDescription attributes[8]{};
     attributes[0].location = 0;
     attributes[0].binding = 0;
     attributes[0].format = VK_FORMAT_R32G32B32_SFLOAT;
@@ -47,12 +51,28 @@ Pipeline::Pipeline(VkDevice device, VkRenderPass renderPass, VkExtent2D extent,
     attributes[3].binding = 0;
     attributes[3].format = VK_FORMAT_R32G32B32_SFLOAT;
     attributes[3].offset = 8 * sizeof(float);
+    attributes[4].location = 4;
+    attributes[4].binding = 1;
+    attributes[4].format = VK_FORMAT_R32G32B32A32_SFLOAT;
+    attributes[4].offset = 0;
+    attributes[5].location = 5;
+    attributes[5].binding = 1;
+    attributes[5].format = VK_FORMAT_R32G32B32A32_SFLOAT;
+    attributes[5].offset = 16;
+    attributes[6].location = 6;
+    attributes[6].binding = 1;
+    attributes[6].format = VK_FORMAT_R32G32B32A32_SFLOAT;
+    attributes[6].offset = 32;
+    attributes[7].location = 7;
+    attributes[7].binding = 1;
+    attributes[7].format = VK_FORMAT_R32G32B32A32_SFLOAT;
+    attributes[7].offset = 48;
 
     VkPipelineVertexInputStateCreateInfo vertexInput{};
     vertexInput.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
-    vertexInput.vertexBindingDescriptionCount = 1;
-    vertexInput.pVertexBindingDescriptions = &binding;
-    vertexInput.vertexAttributeDescriptionCount = 4;
+    vertexInput.vertexBindingDescriptionCount = 2;
+    vertexInput.pVertexBindingDescriptions = bindings;
+    vertexInput.vertexAttributeDescriptionCount = 8;
     vertexInput.pVertexAttributeDescriptions = attributes;
 
     VkPipelineInputAssemblyStateCreateInfo inputAssembly{};
@@ -112,14 +132,14 @@ Pipeline::Pipeline(VkDevice device, VkRenderPass renderPass, VkExtent2D extent,
     VkPushConstantRange pushConstantRange{};
     pushConstantRange.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
     pushConstantRange.offset = 0;
-    pushConstantRange.size = sizeof(glm::mat4);
+    pushConstantRange.size = pushConstantSize;
 
     VkPipelineLayoutCreateInfo layoutInfo{};
     layoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
     layoutInfo.setLayoutCount = setLayoutCount;
     layoutInfo.pSetLayouts = setLayouts;
-    layoutInfo.pushConstantRangeCount = 1;
-    layoutInfo.pPushConstantRanges = &pushConstantRange;
+    layoutInfo.pushConstantRangeCount = pushConstantSize > 0 ? 1u : 0u;
+    layoutInfo.pPushConstantRanges = pushConstantSize > 0 ? &pushConstantRange : nullptr;
 
     if (vkCreatePipelineLayout(m_Device, &layoutInfo, nullptr, &m_Layout) != VK_SUCCESS)
     {

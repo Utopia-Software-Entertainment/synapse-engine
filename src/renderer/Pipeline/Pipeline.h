@@ -15,7 +15,8 @@ class Pipeline
 public:
     Pipeline(VkDevice device, VkRenderPass renderPass, VkExtent2D extent,
              const VkDescriptorSetLayout* setLayouts, u32 setLayoutCount,
-             std::string_view vertShader, std::string_view fragShader);
+             std::string_view vertShader, std::string_view fragShader,
+             u32 pushConstantSize = 0);
     ~Pipeline();
 
     Pipeline(const Pipeline&) = delete;

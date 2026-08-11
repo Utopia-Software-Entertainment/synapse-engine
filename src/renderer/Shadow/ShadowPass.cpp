@@ -195,23 +195,42 @@ void ShadowPass::CreatePipeline()
     stage.module = vertModule;
     stage.pName = "main";
 
-    VkVertexInputBindingDescription binding{};
-    binding.binding = 0;
-    binding.stride = 11 * sizeof(float);
-    binding.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
+    VkVertexInputBindingDescription bindings[2]{};
+    bindings[0].binding = 0;
+    bindings[0].stride = 11 * sizeof(float);
+    bindings[0].inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
+    bindings[1].binding = 1;
+    bindings[1].stride = sizeof(glm::mat4);
+    bindings[1].inputRate = VK_VERTEX_INPUT_RATE_INSTANCE;
 
-    VkVertexInputAttributeDescription attribute{};
-    attribute.location = 0;
-    attribute.binding = 0;
-    attribute.format = VK_FORMAT_R32G32B32_SFLOAT;
-    attribute.offset = 0;
+    VkVertexInputAttributeDescription attributes[5]{};
+    attributes[0].location = 0;
+    attributes[0].binding = 0;
+    attributes[0].format = VK_FORMAT_R32G32B32_SFLOAT;
+    attributes[0].offset = 0;
+    attributes[1].location = 4;
+    attributes[1].binding = 1;
+    attributes[1].format = VK_FORMAT_R32G32B32A32_SFLOAT;
+    attributes[1].offset = 0;
+    attributes[2].location = 5;
+    attributes[2].binding = 1;
+    attributes[2].format = VK_FORMAT_R32G32B32A32_SFLOAT;
+    attributes[2].offset = 16;
+    attributes[3].location = 6;
+    attributes[3].binding = 1;
+    attributes[3].format = VK_FORMAT_R32G32B32A32_SFLOAT;
+    attributes[3].offset = 32;
+    attributes[4].location = 7;
+    attributes[4].binding = 1;
+    attributes[4].format = VK_FORMAT_R32G32B32A32_SFLOAT;
+    attributes[4].offset = 48;
 
     VkPipelineVertexInputStateCreateInfo vertexInput{};
     vertexInput.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
-    vertexInput.vertexBindingDescriptionCount = 1;
-    vertexInput.pVertexBindingDescriptions = &binding;
-    vertexInput.vertexAttributeDescriptionCount = 1;
-    vertexInput.pVertexAttributeDescriptions = &attribute;
+    vertexInput.vertexBindingDescriptionCount = 2;
+    vertexInput.pVertexBindingDescriptions = bindings;
+    vertexInput.vertexAttributeDescriptionCount = 5;
+    vertexInput.pVertexAttributeDescriptions = attributes;
 
     VkPipelineInputAssemblyStateCreateInfo inputAssembly{};
     inputAssembly.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
@@ -287,8 +306,8 @@ void ShadowPass::CreatePipeline()
 }
 
 void ShadowPass::Render(VkCommandBuffer commandBuffer, VkBuffer vertexBuffer,
-                        VkBuffer indexBuffer, const std::vector<DrawItem>& items,
-                        const glm::mat4& lightViewProj)
+                        VkBuffer indexBuffer, VkBuffer instanceBuffer,
+                        const std::vector<DrawItem>& items, const glm::mat4& lightViewProj)
 {
     VkClearValue clear{};
     clear.depthStencil = {1.0f, 0};
@@ -305,15 +324,18 @@ void ShadowPass::Render(VkCommandBuffer commandBuffer, VkBuffer vertexBuffer,
     vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_Pipeline);
 
     VkDeviceSize offset = 0;
-    vkCmdBindVertexBuffers(commandBuffer, 0, 1, &vertexBuffer, &offset);
+    const VkBuffer buffers[] = {vertexBuffer, instanceBuffer};
+    const VkDeviceSize offsets[] = {0, 0};
+    vkCmdBindVertexBuffers(commandBuffer, 0, 2, buffers, offsets);
     vkCmdBindIndexBuffer(commandBuffer, indexBuffer, 0, VK_INDEX_TYPE_UINT16);
+
+    vkCmdPushConstants(commandBuffer, m_PipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0,
+                       sizeof(lightViewProj), &lightViewProj);
 
     for (const DrawItem& item : items)
     {
-        const glm::mat4 lightMvp = lightViewProj * item.model;
-        vkCmdPushConstants(commandBuffer, m_PipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0,
-                           sizeof(lightMvp), &lightMvp);
-        vkCmdDrawIndexed(commandBuffer, item.indexCount, 1, item.firstIndex, 0, 0);
+        vkCmdDrawIndexed(commandBuffer, item.indexCount, item.instanceCount, item.firstIndex, 0,
+                         item.firstInstance);
     }
 
     vkCmdEndRenderPass(commandBuffer);

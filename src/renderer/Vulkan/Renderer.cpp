@@ -21,6 +21,7 @@ namespace synapse {
 namespace {
 
 constexpr u32 kMaxFramesInFlight = 2;
+constexpr u32 kMaxInstances = 64;
 
 #define VK_CHECK(expr)                                                          \
     do                                                                          \
@@ -114,6 +115,12 @@ void Renderer::SetLightViewProjection(glm::mat4 lightViewProj)
 void Renderer::SetDrawItems(std::vector<DrawItem> items)
 {
     m_DrawItems = std::move(items);
+}
+
+void Renderer::SetInstanceTransforms(const glm::mat4* transforms, u32 count)
+{
+    m_InstanceTransforms.assign(transforms, transforms + count);
+    m_InstanceCount = count;
 }
 
 void Renderer::CreateDescriptorObjects()
@@ -214,6 +221,10 @@ void Renderer::CreateDescriptorObjects()
         VK_CHECK(vkBindBufferMemory(m_Device, m_Frames[i].uboBuffer, m_Frames[i].uboMemory, 0));
         VK_CHECK(vkMapMemory(m_Device, m_Frames[i].uboMemory, 0, bufferSize, 0, &m_Frames[i].uboMapped));
 
+        CreateHostVisibleBuffer(sizeof(glm::mat4) * kMaxInstances,
+                                VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, &m_Frames[i].instanceBuffer,
+                                &m_Frames[i].instanceMemory, &m_Frames[i].instanceMapped);
+
         m_Frames[i].descriptorSet = sets[i];
         m_Frames[i].shadowDescriptorSet = shadowSets[i];
 
@@ -291,6 +302,21 @@ void Renderer::CleanupDescriptorObjects()
         {
             vkFreeMemory(m_Device, frame.uboMemory, nullptr);
             frame.uboMemory = VK_NULL_HANDLE;
+        }
+        if (frame.instanceMapped != nullptr)
+        {
+            vkUnmapMemory(m_Device, frame.instanceMemory);
+            frame.instanceMapped = nullptr;
+        }
+        if (frame.instanceBuffer != VK_NULL_HANDLE)
+        {
+            vkDestroyBuffer(m_Device, frame.instanceBuffer, nullptr);
+            frame.instanceBuffer = VK_NULL_HANDLE;
+        }
+        if (frame.instanceMemory != VK_NULL_HANDLE)
+        {
+            vkFreeMemory(m_Device, frame.instanceMemory, nullptr);
+            frame.instanceMemory = VK_NULL_HANDLE;
         }
     }
 }
@@ -376,6 +402,44 @@ VkBuffer Renderer::CreateDeviceBuffer(u32 size, VkBufferUsageFlags usage, const 
     vkFreeMemory(m_Device, stagingMemory, nullptr);
 
     return buffer;
+}
+
+void Renderer::CreateHostVisibleBuffer(VkDeviceSize size, VkBufferUsageFlags usage,
+                                       VkBuffer* outBuffer, VkDeviceMemory* outMemory,
+                                       void** outMapped)
+{
+    VkBufferCreateInfo bufferInfo{};
+    bufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+    bufferInfo.size = size;
+    bufferInfo.usage = usage;
+    bufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+    VK_CHECK(vkCreateBuffer(m_Device, &bufferInfo, nullptr, outBuffer));
+
+    VkMemoryRequirements memRequirements{};
+    vkGetBufferMemoryRequirements(m_Device, *outBuffer, &memRequirements);
+
+    VkPhysicalDeviceMemoryProperties memProperties{};
+    vkGetPhysicalDeviceMemoryProperties(m_PhysicalDevice, &memProperties);
+
+    u32 memoryType = VK_MAX_MEMORY_TYPES;
+    for (u32 i = 0; i < memProperties.memoryTypeCount; ++i)
+    {
+        if ((memRequirements.memoryTypeBits & (1u << i)) != 0 &&
+            (memProperties.memoryTypes[i].propertyFlags &
+             (VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT)) != 0)
+        {
+            memoryType = i;
+            break;
+        }
+    }
+
+    VkMemoryAllocateInfo allocInfo{};
+    allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+    allocInfo.allocationSize = memRequirements.size;
+    allocInfo.memoryTypeIndex = memoryType;
+    VK_CHECK(vkAllocateMemory(m_Device, &allocInfo, nullptr, outMemory));
+    VK_CHECK(vkBindBufferMemory(m_Device, *outBuffer, *outMemory, 0));
+    VK_CHECK(vkMapMemory(m_Device, *outMemory, 0, size, 0, outMapped));
 }
 
 VkCommandBuffer Renderer::BeginSingleTimeCommands()
@@ -614,12 +678,11 @@ void Renderer::RecreatePipeline()
 
     m_Pipeline = std::make_unique<Pipeline>(
         m_Device, m_RenderPass, m_SwapchainExtent, layouts, 2,
-        std::string_view(reinterpret_cast<const char*>(synapse::triangle_vert_data) +
-                             0,
+        std::string_view(reinterpret_cast<const char*>(synapse::triangle_vert_data) + 0,
                          synapse::triangle_vert_size),
-        std::string_view(reinterpret_cast<const char*>(synapse::triangle_frag_data) +
-                             0,
-                         synapse::triangle_frag_size));
+        std::string_view(reinterpret_cast<const char*>(synapse::triangle_frag_data) + 0,
+                         synapse::triangle_frag_size),
+        0);
 }
 
 void Renderer::CreateInstance()
@@ -1069,8 +1132,15 @@ void Renderer::Draw()
     }
     VK_CHECK(acquireResult);
 
-    const CameraUBO ubo{m_View, m_Projection};
+    const CameraUBO ubo{m_View, m_Projection, m_LightVP};
     std::memcpy(frame.uboMapped, &ubo, sizeof(ubo));
+
+    const u32 instanceCount = std::min(m_InstanceCount, kMaxInstances);
+    if (instanceCount > 0)
+    {
+        std::memcpy(frame.instanceMapped, m_InstanceTransforms.data(),
+                    instanceCount * sizeof(glm::mat4));
+    }
 
     VK_CHECK(vkResetCommandBuffer(frame.commandBuffer, 0));
 
@@ -1079,8 +1149,8 @@ void Renderer::Draw()
     beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
     VK_CHECK(vkBeginCommandBuffer(frame.commandBuffer, &beginInfo));
 
-    m_ShadowPass->Render(frame.commandBuffer, m_VertexBuffer, m_IndexBuffer, m_DrawItems,
-                         m_LightVP);
+    m_ShadowPass->Render(frame.commandBuffer, m_VertexBuffer, m_IndexBuffer,
+                         frame.instanceBuffer, m_DrawItems, m_LightVP);
 
     VkMemoryBarrier shadowBarrier{};
     shadowBarrier.sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER;
@@ -1113,14 +1183,15 @@ void Renderer::Draw()
                             m_Pipeline->GetLayout(), 0, 2, sets, 0, nullptr);
 
     VkDeviceSize offset = 0;
-    vkCmdBindVertexBuffers(frame.commandBuffer, 0, 1, &m_VertexBuffer, &offset);
+    const VkBuffer buffers[] = {m_VertexBuffer, frame.instanceBuffer};
+    const VkDeviceSize offsets[] = {0, 0};
+    vkCmdBindVertexBuffers(frame.commandBuffer, 0, 2, buffers, offsets);
     vkCmdBindIndexBuffer(frame.commandBuffer, m_IndexBuffer, 0, VK_INDEX_TYPE_UINT16);
 
     for (const DrawItem& item : m_DrawItems)
     {
-        vkCmdPushConstants(frame.commandBuffer, m_Pipeline->GetLayout(),
-                           VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(item.model), &item.model);
-        vkCmdDrawIndexed(frame.commandBuffer, item.indexCount, 1, item.firstIndex, 0, 0);
+        vkCmdDrawIndexed(frame.commandBuffer, item.indexCount, item.instanceCount, item.firstIndex,
+                         0, item.firstInstance);
     }
 
     vkCmdEndRenderPass(frame.commandBuffer);

@@ -34,6 +34,7 @@ public:
     void SetClearColor(glm::vec3 color);
     void SetViewProjection(glm::mat4 view, glm::mat4 proj);
     void SetLightViewProjection(glm::mat4 lightViewProj);
+    void SetInstanceTransforms(const glm::mat4* transforms, u32 count);
     void SetDrawItems(std::vector<DrawItem> items);
     void SetGeometry(const Mesh& mesh);
 
@@ -46,9 +47,12 @@ private:
         VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
         VkBuffer uboBuffer = VK_NULL_HANDLE;
         VkDeviceMemory uboMemory = VK_NULL_HANDLE;
+        VkBuffer instanceBuffer = VK_NULL_HANDLE;
+        VkDeviceMemory instanceMemory = VK_NULL_HANDLE;
         VkDescriptorSet descriptorSet = VK_NULL_HANDLE;
         VkDescriptorSet shadowDescriptorSet = VK_NULL_HANDLE;
         void* uboMapped = nullptr;
+        void* instanceMapped = nullptr;
     };
 
     struct CameraUBO
@@ -77,6 +81,8 @@ private:
     void CleanupTexture();
     VkBuffer CreateDeviceBuffer(u32 size, VkBufferUsageFlags usage, const void* data,
                                 VkDeviceMemory* outMemory);
+    void CreateHostVisibleBuffer(VkDeviceSize size, VkBufferUsageFlags usage, VkBuffer* outBuffer,
+                                 VkDeviceMemory* outMemory, void** outMapped);
     VkCommandBuffer BeginSingleTimeCommands();
     void EndSingleTimeCommands(VkCommandBuffer commandBuffer);
     void RecordCommandBuffer(Frame& frame, u32 imageIndex);
@@ -127,6 +133,8 @@ private:
     VkImageView m_TextureImageView = VK_NULL_HANDLE;
     VkSampler m_TextureSampler = VK_NULL_HANDLE;
     std::vector<DrawItem> m_DrawItems;
+    std::vector<glm::mat4> m_InstanceTransforms;
+    u32 m_InstanceCount = 0;
     glm::mat4 m_View = glm::mat4(1.0f);
     glm::mat4 m_Projection = glm::mat4(1.0f);
     glm::mat4 m_LightVP = glm::mat4(1.0f);

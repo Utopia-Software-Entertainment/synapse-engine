@@ -26,7 +26,8 @@ public:
     VkSampler GetSampler() const { return m_Sampler; }
 
     void Render(VkCommandBuffer commandBuffer, VkBuffer vertexBuffer, VkBuffer indexBuffer,
-                const std::vector<DrawItem>& items, const glm::mat4& lightViewProj);
+                VkBuffer instanceBuffer, const std::vector<DrawItem>& items,
+                const glm::mat4& lightViewProj);
 
 private:
     void CreateImage();

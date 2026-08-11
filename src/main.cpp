@@ -151,32 +151,33 @@ int main()
         const float elapsed = std::chrono::duration<float>(
             std::chrono::steady_clock::now() - startTime).count();
 
-        constexpr uint32_t kCubeIndexCount = 36;
-        constexpr uint32_t kCubeFirstIndex = 0;
-        constexpr uint32_t kFloorFirstIndex = 36;
-        constexpr uint32_t kFloorIndexCount = 6;
-
+        std::vector<glm::mat4> transforms;
         std::vector<synapse::DrawItem> items;
-        items.reserve(9);
+        transforms.reserve(9);
+        items.reserve(4);
 
-        items.push_back({glm::mat4(1.0f), kFloorFirstIndex, kFloorIndexCount});
+        transforms.push_back(glm::mat4(1.0f));
+        items.push_back({kFloorFirstIndex, kFloorIndexCount, 0, 1});
 
-        items.push_back({glm::rotate(glm::mat4(1.0f), elapsed * 0.5f, glm::vec3(0.0f, 1.0f, 0.0f)),
-                         kCubeFirstIndex, kCubeIndexCount});
+        transforms.push_back(glm::rotate(glm::mat4(1.0f), elapsed * 0.5f, glm::vec3(0.0f, 1.0f, 0.0f)));
+        items.push_back({kCubeFirstIndex, kCubeIndexCount, 1, 1});
 
-        items.push_back({glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 1.3f, 0.0f)) *
-                             glm::rotate(glm::mat4(1.0f), elapsed * 0.3f, glm::vec3(0.0f, 1.0f, 0.0f)),
-                         kSphereFirstIndex, kSphereIndexCount});
+        transforms.push_back(glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 1.3f, 0.0f)) *
+                             glm::rotate(glm::mat4(1.0f), elapsed * 0.3f, glm::vec3(0.0f, 1.0f, 0.0f)));
+        items.push_back({kSphereFirstIndex, kSphereIndexCount, 2, 1});
 
+        constexpr uint32_t kOrbitalInstanceOffset = 3;
         for (uint32_t i = 0; i < 6; ++i)
         {
             const float angle = elapsed * 0.9f + static_cast<float>(i) * glm::two_pi<float>() / 6.0f;
             glm::mat4 model = glm::translate(glm::mat4(1.0f), glm::vec3(
                 std::cos(angle) * 2.2f, 0.4f, std::sin(angle) * 2.2f));
             model = model * glm::rotate(glm::mat4(1.0f), elapsed * 1.5f, glm::vec3(0.0f, 1.0f, 0.0f));
-            items.push_back({model, kCubeFirstIndex, kCubeIndexCount});
+            transforms.push_back(model);
         }
+        items.push_back({kCubeFirstIndex, kCubeIndexCount, kOrbitalInstanceOffset, 6});
 
+        renderer.SetInstanceTransforms(transforms.data(), static_cast<uint32_t>(transforms.size()));
         renderer.SetDrawItems(std::move(items));
         renderer.SetViewProjection(camera.GetViewMatrix(), camera.GetProjectionMatrix());
         renderer.SetLightViewProjection(lightViewProj);
