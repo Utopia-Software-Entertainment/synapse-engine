@@ -26,7 +26,7 @@ public:
 
 private:
     glm::vec3 m_Position = glm::vec3(0.0f);
-    f32 m_Yaw = -90.0f;
+    f32 m_Yaw = 0.0f;
     f32 m_Pitch = 0.0f;
     f32 m_FovDegrees = 60.0f;
     f32 m_AspectRatio = 1.0f;
