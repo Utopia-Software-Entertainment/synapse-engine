@@ -17,6 +17,9 @@ public:
     Engine& operator=(const Engine&) = delete;
 
     void Run();
+    void Start();
+    void TickFrame();
+    bool Running() const { return m_Running; }
 
 private:
     void InitCore();

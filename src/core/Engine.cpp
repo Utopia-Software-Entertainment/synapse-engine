@@ -40,8 +40,7 @@ void Engine::Shutdown()
 
 void Engine::Run()
 {
-    InitCore();
-    InitModules();
+    Start();
 
     m_Running = true;
     m_Timer.Reset();
@@ -50,15 +49,29 @@ void Engine::Run()
 
     while (m_Running)
     {
-        const f32 deltaTime = m_Timer.GetDeltaTime();
-
-        ProcessFrame(deltaTime);
-        RenderFrame();
-
-        m_Timer.WaitForTargetFramerate(90.0f);
+        TickFrame();
     }
 
     Shutdown();
+}
+
+void Engine::Start()
+{
+    InitCore();
+    InitModules();
+    m_Running = true;
+    m_Timer.Reset();
+    SYNAPSE_CORE_INFO("Engine main loop started (target: 90 Hz)");
+}
+
+void Engine::TickFrame()
+{
+    const f32 deltaTime = m_Timer.GetDeltaTime();
+
+    ProcessFrame(deltaTime);
+    RenderFrame();
+
+    m_Timer.WaitForTargetFramerate(90.0f);
 }
 
 void Engine::ProcessFrame(f32 deltaTime)

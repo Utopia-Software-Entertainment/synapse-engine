@@ -2,6 +2,7 @@ add_library(synapse_renderer
     Vulkan/VulkanContext.cpp
     Vulkan/VulkanDevice.cpp
     Vulkan/VulkanQueues.cpp
+    Vulkan/Renderer.cpp
     Pipeline/Pipeline.cpp
     Pipeline/Shader.cpp
     Pipeline/ShaderCompiler.cpp

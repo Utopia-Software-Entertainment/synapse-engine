@@ -1,0 +1,74 @@
+#pragma once
+
+#include <core/Types.h>
+
+#include <glm/glm.hpp>
+
+#include <vulkan/vulkan.h>
+
+#include <vector>
+
+struct GLFWwindow;
+
+namespace synapse {
+
+class Window;
+
+class Renderer
+{
+public:
+    Renderer(Window& window, u32 width, u32 height);
+    ~Renderer();
+
+    Renderer(const Renderer&) = delete;
+    Renderer& operator=(const Renderer&) = delete;
+
+    void Draw();
+    void SetClearColor(glm::vec3 color);
+
+private:
+    struct Frame
+    {
+        VkSemaphore imageAvailable = VK_NULL_HANDLE;
+        VkSemaphore renderFinished = VK_NULL_HANDLE;
+        VkFence inFlight = VK_NULL_HANDLE;
+        VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
+    };
+
+    void CreateInstance();
+    void CreateSurface();
+    void PickPhysicalDevice();
+    void CreateDevice();
+    void CreateSwapchain();
+    void CreateRenderPass();
+    void CreateFramebuffers();
+    void CreateCommandBuffers();
+    void CreateSyncObjects();
+    void CleanupSwapchain();
+
+    Window& m_Window;
+    u32 m_Width = 0;
+    u32 m_Height = 0;
+    glm::vec3 m_ClearColor = glm::vec3(0.0f, 0.2f, 0.4f);
+
+    VkInstance m_Instance = VK_NULL_HANDLE;
+    VkSurfaceKHR m_Surface = VK_NULL_HANDLE;
+    VkPhysicalDevice m_PhysicalDevice = VK_NULL_HANDLE;
+    VkDevice m_Device = VK_NULL_HANDLE;
+    VkQueue m_GraphicsQueue = VK_NULL_HANDLE;
+    u32 m_QueueFamilyIndex = 0;
+
+    VkSwapchainKHR m_Swapchain = VK_NULL_HANDLE;
+    VkFormat m_SwapchainFormat = VK_FORMAT_UNDEFINED;
+    VkExtent2D m_SwapchainExtent{};
+    std::vector<VkImage> m_SwapchainImages;
+    std::vector<VkImageView> m_SwapchainImageViews;
+    std::vector<VkFramebuffer> m_Framebuffers;
+
+    VkRenderPass m_RenderPass = VK_NULL_HANDLE;
+    VkCommandPool m_CommandPool = VK_NULL_HANDLE;
+    std::vector<Frame> m_Frames;
+    u32 m_FrameIndex = 0;
+};
+
+} // namespace synapse
