@@ -1,5 +1,9 @@
 #include <renderer/Vulkan/Renderer.h>
+#include <renderer/Pipeline/Pipeline.h>
 #include <platform/Window.h>
+
+#include <triangle.vert.h>
+#include <triangle.frag.h>
 
 #include <core/Logger.h>
 
@@ -42,6 +46,8 @@ Renderer::Renderer(Window& window, u32 width, u32 height)
     CreateFramebuffers();
     CreateCommandBuffers();
     CreateSyncObjects();
+    CreateVertexBuffer();
+    RecreatePipeline();
 
     SYNAPSE_CORE_INFO("Vulkan renderer initialized ({}x{}, {} swapchain images)",
                       m_SwapchainExtent.width, m_SwapchainExtent.height,
@@ -51,6 +57,11 @@ Renderer::Renderer(Window& window, u32 width, u32 height)
 Renderer::~Renderer()
 {
     vkDeviceWaitIdle(m_Device);
+
+    m_Pipeline.reset();
+
+    vkDestroyBuffer(m_Device, m_VertexBuffer, nullptr);
+    vkFreeMemory(m_Device, m_VertexBufferMemory, nullptr);
 
     for (Frame& frame : m_Frames)
     {
@@ -72,6 +83,68 @@ Renderer::~Renderer()
 void Renderer::SetClearColor(glm::vec3 color)
 {
     m_ClearColor = color;
+}
+
+void Renderer::CreateVertexBuffer()
+{
+    constexpr float kTriangle[18] = {
+        0.0f, -0.5f, 0.0f, 1.0f, 0.0f, 0.0f,
+        0.5f,  0.5f, 0.0f, 0.0f, 1.0f, 0.0f,
+        -0.5f, 0.5f, 0.0f, 0.0f, 0.0f, 1.0f,
+    };
+    m_VertexCount = 3;
+
+    VkBufferCreateInfo bufferInfo{};
+    bufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+    bufferInfo.size = sizeof(kTriangle);
+    bufferInfo.usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
+    bufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+
+    VK_CHECK(vkCreateBuffer(m_Device, &bufferInfo, nullptr, &m_VertexBuffer));
+
+    VkMemoryRequirements memRequirements{};
+    vkGetBufferMemoryRequirements(m_Device, m_VertexBuffer, &memRequirements);
+
+    VkPhysicalDeviceMemoryProperties memProperties{};
+    vkGetPhysicalDeviceMemoryProperties(m_PhysicalDevice, &memProperties);
+
+    u32 memoryType = VK_MAX_MEMORY_TYPES;
+    for (u32 i = 0; i < memProperties.memoryTypeCount; ++i)
+    {
+        if ((memRequirements.memoryTypeBits & (1u << i)) != 0 &&
+            (memProperties.memoryTypes[i].propertyFlags & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT) != 0)
+        {
+            memoryType = i;
+            break;
+        }
+    }
+
+    VkMemoryAllocateInfo allocInfo{};
+    allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+    allocInfo.allocationSize = memRequirements.size;
+    allocInfo.memoryTypeIndex = memoryType;
+
+    VK_CHECK(vkAllocateMemory(m_Device, &allocInfo, nullptr, &m_VertexBufferMemory));
+    VK_CHECK(vkBindBufferMemory(m_Device, m_VertexBuffer, m_VertexBufferMemory, 0));
+
+    void* data = nullptr;
+    VK_CHECK(vkMapMemory(m_Device, m_VertexBufferMemory, 0, sizeof(kTriangle), 0, &data));
+    std::memcpy(data, kTriangle, sizeof(kTriangle));
+    vkUnmapMemory(m_Device, m_VertexBufferMemory);
+
+    SYNAPSE_CORE_INFO("Vertex buffer created ({} vertices, host-visible)", m_VertexCount);
+}
+
+void Renderer::RecreatePipeline()
+{
+    m_Pipeline = std::make_unique<Pipeline>(
+        m_Device, m_RenderPass, m_SwapchainExtent,
+        std::string_view(reinterpret_cast<const char*>(synapse::triangle_vert_data) +
+                            0,
+                         synapse::triangle_vert_size),
+        std::string_view(reinterpret_cast<const char*>(synapse::triangle_frag_data) +
+                            0,
+                         synapse::triangle_frag_size));
 }
 
 void Renderer::CreateInstance()
@@ -425,6 +498,13 @@ void Renderer::Draw()
     renderPassInfo.pClearValues = &clearValue;
 
     vkCmdBeginRenderPass(frame.commandBuffer, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
+
+    vkCmdBindPipeline(frame.commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_Pipeline->GetHandle());
+
+    VkDeviceSize offset = 0;
+    vkCmdBindVertexBuffers(frame.commandBuffer, 0, 1, &m_VertexBuffer, &offset);
+    vkCmdDraw(frame.commandBuffer, m_VertexCount, 1, 0, 0);
+
     vkCmdEndRenderPass(frame.commandBuffer);
 
     VK_CHECK(vkEndCommandBuffer(frame.commandBuffer));
@@ -459,6 +539,7 @@ void Renderer::Draw()
         CleanupSwapchain();
         CreateSwapchain();
         CreateFramebuffers();
+        RecreatePipeline();
         SYNAPSE_CORE_WARN("Swapchain recreated after resize");
     }
     else

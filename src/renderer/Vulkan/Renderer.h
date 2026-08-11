@@ -6,12 +6,14 @@
 
 #include <vulkan/vulkan.h>
 
+#include <memory>
 #include <vector>
 
 struct GLFWwindow;
 
 namespace synapse {
 
+class Pipeline;
 class Window;
 
 class Renderer
@@ -44,7 +46,10 @@ private:
     void CreateFramebuffers();
     void CreateCommandBuffers();
     void CreateSyncObjects();
+    void CreateVertexBuffer();
+    void RecreatePipeline();
     void CleanupSwapchain();
+    void RecordCommandBuffer(Frame& frame, u32 imageIndex);
 
     Window& m_Window;
     u32 m_Width = 0;
@@ -69,6 +74,11 @@ private:
     VkCommandPool m_CommandPool = VK_NULL_HANDLE;
     std::vector<Frame> m_Frames;
     u32 m_FrameIndex = 0;
+
+    std::unique_ptr<Pipeline> m_Pipeline;
+    VkBuffer m_VertexBuffer = VK_NULL_HANDLE;
+    VkDeviceMemory m_VertexBufferMemory = VK_NULL_HANDLE;
+    u32 m_VertexCount = 0;
 };
 
 } // namespace synapse
