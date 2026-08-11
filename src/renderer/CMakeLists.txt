@@ -1,4 +1,5 @@
 add_library(synapse_renderer
+    Camera/Camera.cpp
     Vulkan/VulkanContext.cpp
     Vulkan/VulkanDevice.cpp
     Vulkan/VulkanQueues.cpp

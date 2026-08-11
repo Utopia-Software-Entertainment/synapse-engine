@@ -8,6 +8,7 @@
 namespace synapse {
 
 Pipeline::Pipeline(VkDevice device, VkRenderPass renderPass, VkExtent2D extent,
+                   VkDescriptorSetLayout descriptorSetLayout,
                    std::string_view vertShader, std::string_view fragShader)
     : m_Device(device)
 {
@@ -94,6 +95,8 @@ Pipeline::Pipeline(VkDevice device, VkRenderPass renderPass, VkExtent2D extent,
 
     VkPipelineLayoutCreateInfo layoutInfo{};
     layoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+    layoutInfo.setLayoutCount = 1;
+    layoutInfo.pSetLayouts = &descriptorSetLayout;
 
     if (vkCreatePipelineLayout(m_Device, &layoutInfo, nullptr, &m_Layout) != VK_SUCCESS)
     {

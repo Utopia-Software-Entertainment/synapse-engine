@@ -27,6 +27,7 @@ public:
 
     void Draw();
     void SetClearColor(glm::vec3 color);
+    void SetViewProjection(glm::mat4 view, glm::mat4 proj);
 
 private:
     struct Frame
@@ -35,6 +36,16 @@ private:
         VkSemaphore renderFinished = VK_NULL_HANDLE;
         VkFence inFlight = VK_NULL_HANDLE;
         VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
+        VkBuffer uboBuffer = VK_NULL_HANDLE;
+        VkDeviceMemory uboMemory = VK_NULL_HANDLE;
+        VkDescriptorSet descriptorSet = VK_NULL_HANDLE;
+        void* uboMapped = nullptr;
+    };
+
+    struct CameraUBO
+    {
+        glm::mat4 view;
+        glm::mat4 proj;
     };
 
     void CreateInstance();
@@ -47,8 +58,10 @@ private:
     void CreateCommandBuffers();
     void CreateSyncObjects();
     void CreateVertexBuffer();
+    void CreateDescriptorObjects();
     void RecreatePipeline();
     void CleanupSwapchain();
+    void CleanupDescriptorObjects();
     void RecordCommandBuffer(Frame& frame, u32 imageIndex);
 
     Window& m_Window;
@@ -79,6 +92,11 @@ private:
     VkBuffer m_VertexBuffer = VK_NULL_HANDLE;
     VkDeviceMemory m_VertexBufferMemory = VK_NULL_HANDLE;
     u32 m_VertexCount = 0;
+
+    VkDescriptorSetLayout m_DescriptorSetLayout = VK_NULL_HANDLE;
+    VkDescriptorPool m_DescriptorPool = VK_NULL_HANDLE;
+    glm::mat4 m_View = glm::mat4(1.0f);
+    glm::mat4 m_Projection = glm::mat4(1.0f);
 };
 
 } // namespace synapse

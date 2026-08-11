@@ -47,6 +47,7 @@ Renderer::Renderer(Window& window, u32 width, u32 height)
     CreateCommandBuffers();
     CreateSyncObjects();
     CreateVertexBuffer();
+    CreateDescriptorObjects();
     RecreatePipeline();
 
     SYNAPSE_CORE_INFO("Vulkan renderer initialized ({}x{}, {} swapchain images)",
@@ -59,6 +60,7 @@ Renderer::~Renderer()
     vkDeviceWaitIdle(m_Device);
 
     m_Pipeline.reset();
+    CleanupDescriptorObjects();
 
     vkDestroyBuffer(m_Device, m_VertexBuffer, nullptr);
     vkFreeMemory(m_Device, m_VertexBufferMemory, nullptr);
@@ -83,6 +85,136 @@ Renderer::~Renderer()
 void Renderer::SetClearColor(glm::vec3 color)
 {
     m_ClearColor = color;
+}
+
+void Renderer::SetViewProjection(glm::mat4 view, glm::mat4 proj)
+{
+    m_View = view;
+    m_Projection = proj;
+}
+
+void Renderer::CreateDescriptorObjects()
+{
+    VkDescriptorSetLayoutBinding binding{};
+    binding.binding = 0;
+    binding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    binding.descriptorCount = 1;
+    binding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+
+    VkDescriptorSetLayoutCreateInfo layoutInfo{};
+    layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+    layoutInfo.bindingCount = 1;
+    layoutInfo.pBindings = &binding;
+    VK_CHECK(vkCreateDescriptorSetLayout(m_Device, &layoutInfo, nullptr, &m_DescriptorSetLayout));
+
+    VkDescriptorPoolSize poolSize{};
+    poolSize.type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    poolSize.descriptorCount = kMaxFramesInFlight;
+
+    VkDescriptorPoolCreateInfo poolInfo{};
+    poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+    poolInfo.poolSizeCount = 1;
+    poolInfo.pPoolSizes = &poolSize;
+    poolInfo.maxSets = kMaxFramesInFlight;
+    VK_CHECK(vkCreateDescriptorPool(m_Device, &poolInfo, nullptr, &m_DescriptorPool));
+
+    VkDeviceSize bufferSize = sizeof(CameraUBO);
+
+    std::vector<VkDescriptorSetLayout> layouts(kMaxFramesInFlight, m_DescriptorSetLayout);
+    VkDescriptorSetAllocateInfo allocInfo{};
+    allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+    allocInfo.descriptorPool = m_DescriptorPool;
+    allocInfo.descriptorSetCount = kMaxFramesInFlight;
+    allocInfo.pSetLayouts = layouts.data();
+
+    std::vector<VkDescriptorSet> sets(kMaxFramesInFlight);
+    VK_CHECK(vkAllocateDescriptorSets(m_Device, &allocInfo, sets.data()));
+
+    for (u32 i = 0; i < kMaxFramesInFlight; ++i)
+    {
+        VkBufferCreateInfo bufferInfo{};
+        bufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+        bufferInfo.size = bufferSize;
+        bufferInfo.usage = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT;
+        bufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+        VK_CHECK(vkCreateBuffer(m_Device, &bufferInfo, nullptr, &m_Frames[i].uboBuffer));
+
+        VkMemoryRequirements memRequirements{};
+        vkGetBufferMemoryRequirements(m_Device, m_Frames[i].uboBuffer, &memRequirements);
+
+        VkPhysicalDeviceMemoryProperties memProperties{};
+        vkGetPhysicalDeviceMemoryProperties(m_PhysicalDevice, &memProperties);
+
+        u32 memoryType = VK_MAX_MEMORY_TYPES;
+        for (u32 t = 0; t < memProperties.memoryTypeCount; ++t)
+        {
+            if ((memRequirements.memoryTypeBits & (1u << t)) != 0 &&
+                (memProperties.memoryTypes[t].propertyFlags &
+                 (VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT)) != 0)
+            {
+                memoryType = t;
+                break;
+            }
+        }
+
+        VkMemoryAllocateInfo allocInfoBuffer{};
+        allocInfoBuffer.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+        allocInfoBuffer.allocationSize = memRequirements.size;
+        allocInfoBuffer.memoryTypeIndex = memoryType;
+        VK_CHECK(vkAllocateMemory(m_Device, &allocInfoBuffer, nullptr, &m_Frames[i].uboMemory));
+        VK_CHECK(vkBindBufferMemory(m_Device, m_Frames[i].uboBuffer, m_Frames[i].uboMemory, 0));
+        VK_CHECK(vkMapMemory(m_Device, m_Frames[i].uboMemory, 0, bufferSize, 0, &m_Frames[i].uboMapped));
+
+        m_Frames[i].descriptorSet = sets[i];
+
+        VkDescriptorBufferInfo bufferDescriptor{};
+        bufferDescriptor.buffer = m_Frames[i].uboBuffer;
+        bufferDescriptor.offset = 0;
+        bufferDescriptor.range = bufferSize;
+
+        VkWriteDescriptorSet write{};
+        write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        write.dstSet = m_Frames[i].descriptorSet;
+        write.dstBinding = 0;
+        write.descriptorCount = 1;
+        write.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+        write.pBufferInfo = &bufferDescriptor;
+        vkUpdateDescriptorSets(m_Device, 1, &write, 0, nullptr);
+    }
+
+    SYNAPSE_CORE_INFO("Descriptor objects created ({} UBO sets)", kMaxFramesInFlight);
+}
+
+void Renderer::CleanupDescriptorObjects()
+{
+    if (m_DescriptorPool != VK_NULL_HANDLE)
+    {
+        vkDestroyDescriptorPool(m_Device, m_DescriptorPool, nullptr);
+        m_DescriptorPool = VK_NULL_HANDLE;
+    }
+    if (m_DescriptorSetLayout != VK_NULL_HANDLE)
+    {
+        vkDestroyDescriptorSetLayout(m_Device, m_DescriptorSetLayout, nullptr);
+        m_DescriptorSetLayout = VK_NULL_HANDLE;
+    }
+    for (Frame& frame : m_Frames)
+    {
+        if (frame.uboMapped != nullptr)
+        {
+            vkUnmapMemory(m_Device, frame.uboMemory);
+            frame.uboMapped = nullptr;
+        }
+        if (frame.uboBuffer != VK_NULL_HANDLE)
+        {
+            vkDestroyBuffer(m_Device, frame.uboBuffer, nullptr);
+            frame.uboBuffer = VK_NULL_HANDLE;
+        }
+        if (frame.uboMemory != VK_NULL_HANDLE)
+        {
+            vkFreeMemory(m_Device, frame.uboMemory, nullptr);
+            frame.uboMemory = VK_NULL_HANDLE;
+        }
+    }
 }
 
 void Renderer::CreateVertexBuffer()
@@ -138,7 +270,7 @@ void Renderer::CreateVertexBuffer()
 void Renderer::RecreatePipeline()
 {
     m_Pipeline = std::make_unique<Pipeline>(
-        m_Device, m_RenderPass, m_SwapchainExtent,
+        m_Device, m_RenderPass, m_SwapchainExtent, m_DescriptorSetLayout,
         std::string_view(reinterpret_cast<const char*>(synapse::triangle_vert_data) +
                             0,
                          synapse::triangle_vert_size),
@@ -479,6 +611,9 @@ void Renderer::Draw()
     }
     VK_CHECK(acquireResult);
 
+    const CameraUBO ubo{m_View, m_Projection};
+    std::memcpy(frame.uboMapped, &ubo, sizeof(ubo));
+
     VK_CHECK(vkResetCommandBuffer(frame.commandBuffer, 0));
 
     VkCommandBufferBeginInfo beginInfo{};
@@ -500,6 +635,8 @@ void Renderer::Draw()
     vkCmdBeginRenderPass(frame.commandBuffer, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
 
     vkCmdBindPipeline(frame.commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_Pipeline->GetHandle());
+    vkCmdBindDescriptorSets(frame.commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS,
+                            m_Pipeline->GetLayout(), 0, 1, &frame.descriptorSet, 0, nullptr);
 
     VkDeviceSize offset = 0;
     vkCmdBindVertexBuffers(frame.commandBuffer, 0, 1, &m_VertexBuffer, &offset);

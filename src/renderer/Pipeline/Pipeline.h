@@ -12,6 +12,7 @@ class Pipeline
 {
 public:
     Pipeline(VkDevice device, VkRenderPass renderPass, VkExtent2D extent,
+             VkDescriptorSetLayout descriptorSetLayout,
              std::string_view vertShader, std::string_view fragShader);
     ~Pipeline();
 
@@ -19,6 +20,7 @@ public:
     Pipeline& operator=(const Pipeline&) = delete;
 
     VkPipeline GetHandle() const { return m_Pipeline; }
+    VkPipelineLayout GetLayout() const { return m_Layout; }
 
 private:
     VkShaderModule CreateShaderModule(std::string_view spirvBytes) const;
