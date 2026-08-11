@@ -2,6 +2,7 @@
 #include <core/Types.h>
 #include <platform/Window.h>
 #include <renderer/Camera/Camera.h>
+#include <renderer/Mesh/Mesh.h>
 #include <renderer/Vulkan/Renderer.h>
 
 #include <GLFW/glfw3.h>
@@ -21,6 +22,38 @@ int main()
 
     synapse::Camera camera(60.0f, 1280.0f / 720.0f, 0.1f, 100.0f);
     camera.SetPosition(glm::vec3(0.0f, 0.0f, 3.0f));
+
+    synapse::Mesh cube = synapse::CreateCube();
+    synapse::Mesh floor = synapse::CreateFloor();
+    synapse::Mesh sphere = synapse::MeshLoader::LoadObj("assets/models/sphere.obj");
+
+    synapse::Mesh scene;
+    scene.vertices = cube.vertices;
+    scene.vertices.insert(scene.vertices.end(), floor.vertices.begin(), floor.vertices.end());
+    scene.vertices.insert(scene.vertices.end(), sphere.vertices.begin(), sphere.vertices.end());
+
+    constexpr uint32_t kCubeVertexOffset = 0;
+    const uint32_t kFloorVertexOffset = static_cast<uint32_t>(cube.vertices.size());
+    const uint32_t kSphereVertexOffset = kFloorVertexOffset + static_cast<uint32_t>(floor.vertices.size());
+
+    scene.indices = cube.indices;
+    for (uint16_t index : floor.indices)
+    {
+        scene.indices.push_back(index + kFloorVertexOffset);
+    }
+    for (uint16_t index : sphere.indices)
+    {
+        scene.indices.push_back(index + kSphereVertexOffset);
+    }
+
+    renderer.SetGeometry(scene);
+
+    constexpr uint32_t kCubeIndexCount = 36;
+    constexpr uint32_t kCubeFirstIndex = 0;
+    const uint32_t kFloorFirstIndex = static_cast<uint32_t>(cube.indices.size());
+    constexpr uint32_t kFloorIndexCount = 6;
+    const uint32_t kSphereFirstIndex = kFloorFirstIndex + kFloorIndexCount;
+    const uint32_t kSphereIndexCount = static_cast<uint32_t>(sphere.indices.size());
 
     engine.Start();
 
@@ -82,12 +115,16 @@ int main()
         constexpr uint32_t kFloorIndexCount = 6;
 
         std::vector<synapse::DrawItem> items;
-        items.reserve(8);
+        items.reserve(9);
 
         items.push_back({glm::mat4(1.0f), kFloorFirstIndex, kFloorIndexCount});
 
         items.push_back({glm::rotate(glm::mat4(1.0f), elapsed * 0.5f, glm::vec3(0.0f, 1.0f, 0.0f)),
                          kCubeFirstIndex, kCubeIndexCount});
+
+        items.push_back({glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 1.3f, 0.0f)) *
+                             glm::rotate(glm::mat4(1.0f), elapsed * 0.3f, glm::vec3(0.0f, 1.0f, 0.0f)),
+                         kSphereFirstIndex, kSphereIndexCount});
 
         for (uint32_t i = 0; i < 6; ++i)
         {

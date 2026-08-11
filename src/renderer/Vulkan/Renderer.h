@@ -1,6 +1,7 @@
 #pragma once
 
 #include <core/Types.h>
+#include <renderer/Mesh/Mesh.h>
 
 #include <glm/glm.hpp>
 
@@ -36,6 +37,7 @@ public:
     void SetClearColor(glm::vec3 color);
     void SetViewProjection(glm::mat4 view, glm::mat4 proj);
     void SetDrawItems(std::vector<DrawItem> items);
+    void SetGeometry(const Mesh& mesh);
 
 private:
     struct Frame
@@ -66,8 +68,6 @@ private:
     void CreateFramebuffers();
     void CreateCommandBuffers();
     void CreateSyncObjects();
-    void CreateVertexBuffer();
-    void CreateIndexBuffer();
     void CreateTexture();
     void CreateDescriptorObjects();
     void RecreatePipeline();

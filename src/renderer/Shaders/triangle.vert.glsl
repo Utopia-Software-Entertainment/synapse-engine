@@ -3,6 +3,7 @@
 layout(location = 0) in vec3 inPosition;
 layout(location = 1) in vec3 inColor;
 layout(location = 2) in vec2 inUv;
+layout(location = 3) in vec3 inNormal;
 
 layout(set = 0, binding = 0) uniform CameraUBO {
     mat4 view;
@@ -15,10 +16,12 @@ layout(push_constant) uniform ModelPush {
 
 layout(location = 0) out vec3 fragColor;
 layout(location = 1) out vec2 fragUv;
+layout(location = 2) out vec3 fragNormal;
 
 void main()
 {
     gl_Position = ubo.proj * ubo.view * push.model * vec4(inPosition, 1.0);
     fragColor = inColor;
     fragUv = inUv;
+    fragNormal = mat3(push.model) * inNormal;
 }

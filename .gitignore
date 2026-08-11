@@ -36,6 +36,7 @@ third_party/*/
 
 # Assets cache
 assets/cache/
+!assets/models/*.obj
 
 # Logs
 logs/

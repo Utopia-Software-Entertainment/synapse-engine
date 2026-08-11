@@ -47,8 +47,6 @@ Renderer::Renderer(Window& window, u32 width, u32 height)
     CreateFramebuffers();
     CreateCommandBuffers();
     CreateSyncObjects();
-    CreateVertexBuffer();
-    CreateIndexBuffer();
     CreateTexture();
     CreateDescriptorObjects();
     RecreatePipeline();
@@ -362,95 +360,19 @@ void Renderer::EndSingleTimeCommands(VkCommandBuffer commandBuffer)
     vkFreeCommandBuffers(m_Device, m_CommandPool, 1, &commandBuffer);
 }
 
-void Renderer::CreateVertexBuffer()
+void Renderer::SetGeometry(const Mesh& mesh)
 {
-    struct Vertex
-    {
-        float pos[3];
-        float color[3];
-        float uv[2];
-    };
+    m_VertexBuffer = CreateDeviceBuffer(static_cast<u32>(mesh.vertices.size() * sizeof(MeshVertex)),
+                                        VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
+                                        mesh.vertices.data(), &m_VertexBufferMemory);
+    m_IndexBuffer = CreateDeviceBuffer(static_cast<u32>(mesh.indices.size() * sizeof(u16)),
+                                       VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
+                                       mesh.indices.data(), &m_IndexBufferMemory);
+    m_VertexCount = static_cast<u32>(mesh.vertices.size());
+    m_IndexCount = static_cast<u32>(mesh.indices.size());
 
-    constexpr Vertex kCubeVertices[24] = {
-        // +X (rouge)
-        {{ 0.5f, -0.5f, -0.5f}, {1.0f, 0.0f, 0.0f}, {0.0f, 0.0f}},
-        {{ 0.5f,  0.5f, -0.5f}, {1.0f, 0.0f, 0.0f}, {0.0f, 1.0f}},
-        {{ 0.5f,  0.5f,  0.5f}, {1.0f, 0.0f, 0.0f}, {1.0f, 1.0f}},
-        {{ 0.5f, -0.5f,  0.5f}, {1.0f, 0.0f, 0.0f}, {1.0f, 0.0f}},
-        // -X (vert)
-        {{-0.5f, -0.5f,  0.5f}, {0.0f, 1.0f, 0.0f}, {0.0f, 0.0f}},
-        {{-0.5f,  0.5f,  0.5f}, {0.0f, 1.0f, 0.0f}, {0.0f, 1.0f}},
-        {{-0.5f,  0.5f, -0.5f}, {0.0f, 1.0f, 0.0f}, {1.0f, 1.0f}},
-        {{-0.5f, -0.5f, -0.5f}, {0.0f, 1.0f, 0.0f}, {1.0f, 0.0f}},
-        // +Y (bleu)
-        {{-0.5f,  0.5f, -0.5f}, {0.0f, 0.0f, 1.0f}, {0.0f, 0.0f}},
-        {{-0.5f,  0.5f,  0.5f}, {0.0f, 0.0f, 1.0f}, {0.0f, 1.0f}},
-        {{ 0.5f,  0.5f,  0.5f}, {0.0f, 0.0f, 1.0f}, {1.0f, 1.0f}},
-        {{ 0.5f,  0.5f, -0.5f}, {0.0f, 0.0f, 1.0f}, {1.0f, 0.0f}},
-        // -Y (jaune)
-        {{-0.5f, -0.5f, -0.5f}, {1.0f, 1.0f, 0.0f}, {0.0f, 0.0f}},
-        {{ 0.5f, -0.5f, -0.5f}, {1.0f, 1.0f, 0.0f}, {0.0f, 1.0f}},
-        {{ 0.5f, -0.5f,  0.5f}, {1.0f, 1.0f, 0.0f}, {1.0f, 1.0f}},
-        {{-0.5f, -0.5f,  0.5f}, {1.0f, 1.0f, 0.0f}, {1.0f, 0.0f}},
-        // +Z (cyan)
-        {{-0.5f, -0.5f,  0.5f}, {0.0f, 1.0f, 1.0f}, {0.0f, 0.0f}},
-        {{ 0.5f, -0.5f,  0.5f}, {0.0f, 1.0f, 1.0f}, {0.0f, 1.0f}},
-        {{ 0.5f,  0.5f,  0.5f}, {0.0f, 1.0f, 1.0f}, {1.0f, 1.0f}},
-        {{-0.5f,  0.5f,  0.5f}, {0.0f, 1.0f, 1.0f}, {1.0f, 0.0f}},
-        // -Z (magenta)
-        {{-0.5f,  0.5f, -0.5f}, {1.0f, 0.0f, 1.0f}, {0.0f, 0.0f}},
-        {{ 0.5f,  0.5f, -0.5f}, {1.0f, 0.0f, 1.0f}, {0.0f, 1.0f}},
-        {{ 0.5f, -0.5f, -0.5f}, {1.0f, 0.0f, 1.0f}, {1.0f, 1.0f}},
-        {{-0.5f, -0.5f, -0.5f}, {1.0f, 0.0f, 1.0f}, {1.0f, 0.0f}},
-    };
-
-    constexpr Vertex kFloorVertices[4] = {
-        {{-6.0f, -1.0f, -6.0f}, {1.0f, 1.0f, 1.0f}, {0.0f, 0.0f}},
-        {{ 6.0f, -1.0f, -6.0f}, {1.0f, 1.0f, 1.0f}, {6.0f, 0.0f}},
-        {{ 6.0f, -1.0f,  6.0f}, {1.0f, 1.0f, 1.0f}, {6.0f, 6.0f}},
-        {{-6.0f, -1.0f,  6.0f}, {1.0f, 1.0f, 1.0f}, {0.0f, 6.0f}},
-    };
-
-    m_VertexCount = 28;
-    const u32 stride = sizeof(Vertex);
-    std::array<u8, sizeof(kCubeVertices) + sizeof(kFloorVertices)> vertexData{};
-    std::memcpy(vertexData.data(), kCubeVertices, sizeof(kCubeVertices));
-    std::memcpy(vertexData.data() + sizeof(kCubeVertices), kFloorVertices, sizeof(kFloorVertices));
-
-    m_VertexBuffer = CreateDeviceBuffer(static_cast<u32>(vertexData.size()), VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
-                                        vertexData.data(), &m_VertexBufferMemory);
-
-    SYNAPSE_CORE_INFO("Vertex buffer created ({} vertices, device-local)", m_VertexCount);
-}
-
-void Renderer::CreateIndexBuffer()
-{
-    constexpr u16 kCubeIndices[36] = {
-        0,  1,  2,  0,  2,  3,
-        4,  5,  6,  4,  6,  7,
-        8,  9,  10, 8,  10, 11,
-        12, 13, 14, 12, 14, 15,
-        16, 17, 18, 16, 18, 19,
-        20, 21, 22, 20, 22, 23,
-    };
-
-    constexpr u16 kFloorIndices[6] = {24, 25, 26, 24, 26, 27};
-
-    constexpr u16 kAllIndices[42] = {
-        0,  1,  2,  0,  2,  3,
-        4,  5,  6,  4,  6,  7,
-        8,  9,  10, 8,  10, 11,
-        12, 13, 14, 12, 14, 15,
-        16, 17, 18, 16, 18, 19,
-        20, 21, 22, 20, 22, 23,
-        24, 25, 26, 24, 26, 27,
-    };
-    m_IndexCount = 42;
-
-    m_IndexBuffer = CreateDeviceBuffer(sizeof(kAllIndices), VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
-                                       kAllIndices, &m_IndexBufferMemory);
-
-    SYNAPSE_CORE_INFO("Index buffer created ({} indices, device-local)", m_IndexCount);
+    SYNAPSE_CORE_INFO("Geometry set ({} vertices, {} indices, device-local)",
+                      m_VertexCount, m_IndexCount);
 }
 
 void Renderer::CreateTexture()
