@@ -13,6 +13,7 @@
 
 #include <array>
 #include <algorithm>
+#include <cmath>
 #include <cstdlib>
 #include <limits>
 #include <cstring>
@@ -493,16 +494,19 @@ void Renderer::CreateTexture()
 {
     constexpr u32 kTexWidth = 16;
     constexpr u32 kTexHeight = 16;
-    std::array<u8, kTexWidth * kTexHeight * 3> pixels{};
+    const u32 mipLevels =
+        static_cast<u32>(std::floor(std::log2(std::max(kTexWidth, kTexHeight)))) + 1;
+    std::array<u8, kTexWidth * kTexHeight * 4> pixels{};
     for (u32 y = 0; y < kTexHeight; ++y)
     {
         for (u32 x = 0; x < kTexWidth; ++x)
         {
             const u8 value = ((x / 2 + y / 2) % 2 == 0) ? 220u : 60u;
-            const u32 offset = (y * kTexWidth + x) * 3;
+            const u32 offset = (y * kTexWidth + x) * 4;
             pixels[offset + 0] = value;
             pixels[offset + 1] = value;
             pixels[offset + 2] = value;
+            pixels[offset + 3] = 255u;
         }
     }
 
@@ -550,13 +554,14 @@ void Renderer::CreateTexture()
     VkImageCreateInfo imageInfo{};
     imageInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
     imageInfo.imageType = VK_IMAGE_TYPE_2D;
-    imageInfo.format = VK_FORMAT_R8G8B8_UNORM;
+    imageInfo.format = VK_FORMAT_R8G8B8A8_UNORM;
     imageInfo.extent = {kTexWidth, kTexHeight, 1};
-    imageInfo.mipLevels = 1;
+    imageInfo.mipLevels = mipLevels;
     imageInfo.arrayLayers = 1;
     imageInfo.samples = VK_SAMPLE_COUNT_1_BIT;
     imageInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
-    imageInfo.usage = VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
+    imageInfo.usage = VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT |
+                      VK_IMAGE_USAGE_SAMPLED_BIT;
     imageInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
     imageInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
 
@@ -591,7 +596,7 @@ void Renderer::CreateTexture()
     toTransfer.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
     toTransfer.image = m_TextureImage;
     toTransfer.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-    toTransfer.subresourceRange.levelCount = 1;
+    toTransfer.subresourceRange.levelCount = mipLevels;
     toTransfer.subresourceRange.layerCount = 1;
     vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT,
                          0, 0, nullptr, 0, nullptr, 1, &toTransfer);
@@ -603,6 +608,54 @@ void Renderer::CreateTexture()
     vkCmdCopyBufferToImage(cmd, stagingBuffer, m_TextureImage, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
                            1, &region);
 
+    for (u32 level = 1; level < mipLevels; ++level)
+    {
+        VkImageMemoryBarrier barrier{};
+        barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+        barrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+        barrier.newLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+        barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        barrier.image = m_TextureImage;
+        barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+        barrier.subresourceRange.baseMipLevel = level - 1;
+        barrier.subresourceRange.levelCount = 1;
+        barrier.subresourceRange.layerCount = 1;
+        barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+        barrier.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+        vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT,
+                             0, 0, nullptr, 0, nullptr, 1, &barrier);
+
+        VkImageBlit blit{};
+        blit.srcOffsets[0] = {0, 0, 0};
+        blit.srcOffsets[1] = {static_cast<int32_t>(kTexWidth >> (level - 1)),
+                              static_cast<int32_t>(kTexHeight >> (level - 1)), 1};
+        blit.srcSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+        blit.srcSubresource.mipLevel = level - 1;
+        blit.srcSubresource.layerCount = 1;
+        blit.dstOffsets[0] = {0, 0, 0};
+        blit.dstOffsets[1] = {std::max(static_cast<int32_t>(kTexWidth >> level), 1),
+                              std::max(static_cast<int32_t>(kTexHeight >> level), 1), 1};
+        blit.dstSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+        blit.dstSubresource.mipLevel = level;
+        blit.dstSubresource.layerCount = 1;
+        vkCmdBlitImage(cmd, m_TextureImage, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, m_TextureImage,
+                       VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &blit, VK_FILTER_LINEAR);
+    }
+
+    VkImageMemoryBarrier level0ToShaderRead{};
+    level0ToShaderRead.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+    level0ToShaderRead.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+    level0ToShaderRead.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+    level0ToShaderRead.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    level0ToShaderRead.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    level0ToShaderRead.image = m_TextureImage;
+    level0ToShaderRead.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    level0ToShaderRead.subresourceRange.levelCount = 1;
+    level0ToShaderRead.subresourceRange.layerCount = 1;
+    level0ToShaderRead.srcAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+    level0ToShaderRead.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+
     VkImageMemoryBarrier toShaderRead{};
     toShaderRead.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
     toShaderRead.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
@@ -611,12 +664,15 @@ void Renderer::CreateTexture()
     toShaderRead.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
     toShaderRead.image = m_TextureImage;
     toShaderRead.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-    toShaderRead.subresourceRange.levelCount = 1;
+    toShaderRead.subresourceRange.baseMipLevel = 1;
+    toShaderRead.subresourceRange.levelCount = mipLevels - 1;
     toShaderRead.subresourceRange.layerCount = 1;
     toShaderRead.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
     toShaderRead.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+
+    VkImageMemoryBarrier toShaderReadBarriers[2] = {level0ToShaderRead, toShaderRead};
     vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
-                         0, 0, nullptr, 0, nullptr, 1, &toShaderRead);
+                         0, 0, nullptr, 0, nullptr, 2, toShaderReadBarriers);
 
     EndSingleTimeCommands(cmd);
 
@@ -627,25 +683,31 @@ void Renderer::CreateTexture()
     viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
     viewInfo.image = m_TextureImage;
     viewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
-    viewInfo.format = VK_FORMAT_R8G8B8_UNORM;
+    viewInfo.format = VK_FORMAT_R8G8B8A8_UNORM;
     viewInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-    viewInfo.subresourceRange.levelCount = 1;
+    viewInfo.subresourceRange.levelCount = mipLevels;
     viewInfo.subresourceRange.layerCount = 1;
     VK_CHECK(vkCreateImageView(m_Device, &viewInfo, nullptr, &m_TextureImageView));
+
+    VkPhysicalDeviceProperties props{};
+    vkGetPhysicalDeviceProperties(m_PhysicalDevice, &props);
 
     VkSamplerCreateInfo samplerInfo{};
     samplerInfo.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
     samplerInfo.magFilter = VK_FILTER_LINEAR;
     samplerInfo.minFilter = VK_FILTER_LINEAR;
-    samplerInfo.mipmapMode = VK_SAMPLER_MIPMAP_MODE_NEAREST;
+    samplerInfo.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
     samplerInfo.addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT;
     samplerInfo.addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT;
     samplerInfo.addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT;
-    samplerInfo.anisotropyEnable = VK_FALSE;
-    samplerInfo.maxLod = 1.0f;
+    samplerInfo.anisotropyEnable = VK_TRUE;
+    samplerInfo.maxAnisotropy = std::min(16.0f, props.limits.maxSamplerAnisotropy);
+    samplerInfo.minLod = 0.0f;
+    samplerInfo.maxLod = static_cast<float>(mipLevels);
     VK_CHECK(vkCreateSampler(m_Device, &samplerInfo, nullptr, &m_TextureSampler));
 
-    SYNAPSE_CORE_INFO("Texture created ({}x{} damier, device-local)", kTexWidth, kTexHeight);
+    SYNAPSE_CORE_INFO("Texture created ({}x{} damier, {} mip levels, anisotropy x{:.1f}, device-local)",
+                      kTexWidth, kTexHeight, mipLevels, samplerInfo.maxAnisotropy);
 }
 
 void Renderer::CleanupTexture()
@@ -703,6 +765,27 @@ void Renderer::CreateInstance()
     createInfo.pApplicationInfo = &appInfo;
     createInfo.enabledExtensionCount = glfwExtensionCount;
     createInfo.ppEnabledExtensionNames = glfwExtensions;
+
+    const char* validationLayers[] = {"VK_LAYER_KHRONOS_validation"};
+    u32 layerCount = 0;
+    vkEnumerateInstanceLayerProperties(&layerCount, nullptr);
+    std::vector<VkLayerProperties> availableLayers(layerCount);
+    vkEnumerateInstanceLayerProperties(&layerCount, availableLayers.data());
+    bool validationAvailable = false;
+    for (const VkLayerProperties& layer : availableLayers)
+    {
+        if (std::strcmp(layer.layerName, "VK_LAYER_KHRONOS_validation") == 0)
+        {
+            validationAvailable = true;
+            break;
+        }
+    }
+    if (validationAvailable)
+    {
+        createInfo.enabledLayerCount = 1;
+        createInfo.ppEnabledLayerNames = validationLayers;
+        SYNAPSE_CORE_INFO("Vulkan validation layers enabled");
+    }
 
     VK_CHECK(vkCreateInstance(&createInfo, nullptr, &m_Instance));
     SYNAPSE_CORE_INFO("Vulkan instance created ({} required extensions)", glfwExtensionCount);
@@ -772,6 +855,7 @@ void Renderer::CreateDevice()
     const char* deviceExtensions[] = {VK_KHR_SWAPCHAIN_EXTENSION_NAME};
 
     VkPhysicalDeviceFeatures features{};
+    features.samplerAnisotropy = VK_TRUE;
 
     VkDeviceCreateInfo createInfo{};
     createInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;

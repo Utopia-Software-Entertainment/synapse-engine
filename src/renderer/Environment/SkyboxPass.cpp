@@ -289,7 +289,11 @@ void SkyboxPass::CreateCubeMap()
     samplerInfo.addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
     samplerInfo.addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
     samplerInfo.addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
-    samplerInfo.maxLod = 1.0f;
+    VkPhysicalDeviceProperties props{};
+    vkGetPhysicalDeviceProperties(m_PhysicalDevice, &props);
+    samplerInfo.anisotropyEnable = VK_TRUE;
+    samplerInfo.maxAnisotropy = std::min(16.0f, props.limits.maxSamplerAnisotropy);
+    samplerInfo.maxLod = 0.25f;
     SKYBOX_VK_CHECK(vkCreateSampler(m_Device, &samplerInfo, nullptr, &m_Sampler));
 }
 
@@ -424,11 +428,14 @@ void SkyboxPass::CreatePipeline(VkRenderPass renderPass)
     dynamicState.dynamicStateCount = 2;
     dynamicState.pDynamicStates = dynamicStates;
 
+    VkPipelineVertexInputStateCreateInfo vertexInput{};
+    vertexInput.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
+
     VkGraphicsPipelineCreateInfo createInfo{};
     createInfo.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
     createInfo.stageCount = 2;
     createInfo.pStages = stages;
-    createInfo.pVertexInputState = nullptr;
+    createInfo.pVertexInputState = &vertexInput;
     createInfo.pInputAssemblyState = &inputAssembly;
     createInfo.pViewportState = &viewportState;
     createInfo.pRasterizationState = &rasterizer;
