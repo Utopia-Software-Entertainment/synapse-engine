@@ -1,0 +1,1359 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Synapse Engine — GitHub Projects Master Board</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Syne:wght@400;600;700;800&display=swap');
+
+        :root {
+            --bg:        #07080f;
+            --surface:   #0e1020;
+            --surface2:  #141726;
+            --border:    #1e2440;
+            --accent:    #5b8aff;
+            --accent2:   #a259ff;
+            --accent3:   #ff6b6b;
+            --accent4:   #00e5a0;
+            --accent5:   #ffb347;
+            --text:      #e8ecff;
+            --muted:     #6b7599;
+            --tag-bg:    #1a1f38;
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+
+        body {
+            background: var(--bg);
+            color: var(--text);
+            font-family: 'Syne', sans-serif;
+            font-size: 13px;
+            line-height: 1.6;
+            min-height: 100vh;
+        }
+
+        /* ── NOISE OVERLAY ── */
+        body::before {
+            content: '';
+            position: fixed; inset: 0;
+            background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.04'/%3E%3C/svg%3E");
+            pointer-events: none; z-index: 0; opacity: .4;
+        }
+
+        .page { position: relative; z-index: 1; max-width: 1600px; margin: 0 auto; padding: 40px 24px 80px; }
+
+        /* ── HEADER ── */
+        header { text-align: center; margin-bottom: 56px; }
+        .logo-line {
+            display: flex; align-items: center; justify-content: center; gap: 16px;
+            margin-bottom: 12px;
+        }
+        .logo-dot {
+            width: 10px; height: 10px; border-radius: 50%;
+            background: var(--accent);
+            box-shadow: 0 0 14px var(--accent);
+            animation: pulse 2s ease-in-out infinite;
+        }
+        @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.4} }
+        .org-label {
+            font-family: 'Space Mono', monospace;
+            font-size: 11px; color: var(--muted); letter-spacing: 3px; text-transform: uppercase;
+        }
+        h1 {
+            font-size: clamp(28px, 4vw, 52px);
+            font-weight: 800;
+            background: linear-gradient(135deg, #5b8aff 0%, #a259ff 50%, #00e5a0 100%);
+            -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+            line-height: 1.1; margin-bottom: 10px;
+        }
+        .subtitle {
+            color: var(--muted); font-size: 14px; letter-spacing: .5px;
+            max-width: 700px; margin: 0 auto;
+        }
+
+        /* ── LEGEND ── */
+        .legend {
+            display: flex; flex-wrap: wrap; gap: 12px;
+            justify-content: center; margin-bottom: 40px;
+        }
+        .legend-item {
+            display: flex; align-items: center; gap: 7px;
+            font-family: 'Space Mono', monospace; font-size: 11px; color: var(--muted);
+        }
+        .legend-dot { width: 10px; height: 10px; border-radius: 50%; }
+
+        /* ── SECTION HEADER ── */
+        .section-title {
+            display: flex; align-items: center; gap: 14px;
+            margin: 48px 0 20px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid var(--border);
+        }
+        .section-num {
+            font-family: 'Space Mono', monospace;
+            font-size: 11px; color: var(--muted);
+            background: var(--surface2); border: 1px solid var(--border);
+            padding: 3px 9px; border-radius: 4px;
+        }
+        .section-title h2 {
+            font-size: 18px; font-weight: 700; color: var(--text);
+        }
+        .phase-badge {
+            margin-left: auto;
+            font-family: 'Space Mono', monospace; font-size: 10px;
+            padding: 3px 10px; border-radius: 20px;
+            border: 1px solid; white-space: nowrap;
+        }
+        .phase-1 { border-color: var(--accent3); color: var(--accent3); }
+        .phase-2 { border-color: var(--accent); color: var(--accent); }
+        .phase-3 { border-color: var(--accent2); color: var(--accent2); }
+        .phase-4 { border-color: var(--accent4); color: var(--accent4); }
+        .phase-5 { border-color: var(--accent5); color: var(--accent5); }
+
+        .module-desc {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-left: 3px solid var(--accent);
+            border-radius: 8px;
+            padding: 14px 18px;
+            margin-bottom: 16px;
+            font-size: 13px; color: var(--muted); line-height: 1.7;
+        }
+        .module-desc strong { color: var(--text); }
+
+        /* ── TABLE ── */
+        .tbl-wrap {
+            overflow-x: auto;
+            border-radius: 10px;
+            border: 1px solid var(--border);
+            margin-bottom: 8px;
+        }
+        table {
+            width: 100%; border-collapse: collapse;
+            font-size: 12.5px;
+        }
+        thead th {
+            background: var(--surface2);
+            color: var(--muted);
+            font-family: 'Space Mono', monospace;
+            font-size: 10px; font-weight: 400;
+            letter-spacing: 1.5px; text-transform: uppercase;
+            padding: 11px 14px; text-align: left;
+            border-bottom: 1px solid var(--border);
+            white-space: nowrap;
+        }
+        tbody tr {
+            border-bottom: 1px solid var(--border);
+            transition: background .15s;
+        }
+        tbody tr:last-child { border-bottom: none; }
+        tbody tr:hover { background: var(--surface2); }
+        td { padding: 11px 14px; vertical-align: top; }
+
+        /* sub-id col */
+        td.sub-id {
+            font-family: 'Space Mono', monospace;
+            font-size: 11px; color: var(--accent);
+            white-space: nowrap; font-weight: 700;
+        }
+        td.sub-name { font-weight: 600; color: var(--text); white-space: nowrap; }
+        td.sub-desc { color: #b0b8d8; max-width: 420px; }
+        td.sub-file {
+            font-family: 'Space Mono', monospace;
+            font-size: 11px; color: var(--accent4);
+            white-space: nowrap;
+        }
+
+        /* ── STATUS BADGES ── */
+        .status {
+            display: inline-block;
+            font-family: 'Space Mono', monospace; font-size: 10px;
+            padding: 2px 9px; border-radius: 20px; border: 1px solid;
+            white-space: nowrap;
+        }
+        .s-todo    { border-color:#3a4060; color:#6b7599; background:#12152a; }
+        .s-block   { border-color:var(--accent3); color:var(--accent3); background:#2a1520; }
+        .s-key     { border-color:var(--accent5); color:var(--accent5); background:#2a1f10; }
+        .s-core    { border-color:var(--accent); color:var(--accent); background:#101a38; }
+
+        /* ── PRIORITY ── */
+        .prio {
+            display: inline-block;
+            font-family: 'Space Mono', monospace; font-size: 10px;
+            padding: 2px 8px; border-radius: 4px;
+            white-space: nowrap;
+        }
+        .p0 { background:#3a1020; color:var(--accent3); }
+        .p1 { background:#2a2010; color:var(--accent5); }
+        .p2 { background:#101828; color:var(--accent); }
+        .p3 { background:#18102a; color:var(--accent2); }
+
+        /* ── OPEN SOURCE TAGS ── */
+        .os-tags { display: flex; flex-wrap: wrap; gap: 5px; }
+        .os-tag {
+            display: inline-block;
+            font-family: 'Space Mono', monospace; font-size: 10px;
+            padding: 2px 8px; border-radius: 4px;
+            background: var(--tag-bg); border: 1px solid var(--border);
+            color: var(--accent2); cursor: default;
+            transition: border-color .15s;
+        }
+        .os-tag:hover { border-color: var(--accent2); }
+
+        /* ── DURATION ── */
+        .dur {
+            font-family: 'Space Mono', monospace;
+            font-size: 11px; color: var(--accent4);
+            white-space: nowrap;
+        }
+
+        /* ── OPEN SOURCE REFERENCE TABLE ── */
+        .ref-section { margin-top: 60px; }
+        .ref-section h2 {
+            font-size: 20px; font-weight: 800;
+            background: linear-gradient(90deg, var(--accent4), var(--accent));
+            -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+            margin-bottom: 8px;
+        }
+        .ref-desc { color: var(--muted); font-size: 13px; margin-bottom: 20px; }
+
+        /* ── FOOTER ── */
+        footer {
+            text-align: center; margin-top: 64px;
+            font-family: 'Space Mono', monospace;
+            font-size: 10px; color: var(--muted); letter-spacing: 2px;
+        }
+
+        /* ── STATS BAR ── */
+        .stats-bar {
+            display: flex; flex-wrap: wrap; gap: 20px;
+            justify-content: center; margin-bottom: 48px;
+        }
+        .stat-card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 10px; padding: 16px 28px;
+            text-align: center;
+        }
+        .stat-num {
+            font-size: 28px; font-weight: 800;
+            background: linear-gradient(135deg, var(--accent), var(--accent2));
+            -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+            display: block;
+        }
+        .stat-lbl {
+            font-family: 'Space Mono', monospace;
+            font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: 1.5px;
+        }
+
+        @media (max-width: 700px) {
+            td.sub-desc { max-width: 220px; }
+            .section-title { flex-wrap: wrap; }
+        }
+    </style>
+</head>
+<body>
+<div class="page">
+
+    <!-- HEADER -->
+    <header>
+        <div class="logo-line">
+            <div class="logo-dot"></div>
+            <span class="org-label">Utopia Software Entertainment</span>
+            <div class="logo-dot"></div>
+        </div>
+        <h1>SYNAPSE ENGINE</h1>
+        <p class="subtitle">GitHub Projects Master Board — Roadmap modulaire complète, sous-modules détaillés, projets open source de référence et ordres de développement pour la réalisation d'un moteur VRMMO neuro-visuel en C++23.</p>
+    </header>
+
+    <!-- STATS -->
+    <div class="stats-bar">
+        <div class="stat-card"><span class="stat-num">10</span><span class="stat-lbl">Modules</span></div>
+        <div class="stat-card"><span class="stat-num">77</span><span class="stat-lbl">Sous-modules</span></div>
+        <div class="stat-card"><span class="stat-num">5</span><span class="stat-lbl">Phases</span></div>
+        <div class="stat-card"><span class="stat-num">24</span><span class="stat-lbl">Mois estimés</span></div>
+        <div class="stat-card"><span class="stat-num">3</span><span class="stat-lbl">Développeurs</span></div>
+    </div>
+
+    <!-- LEGEND -->
+    <div class="legend">
+        <div class="legend-item"><div class="legend-dot" style="background:var(--accent3)"></div>P0 — Bloquant (rien ne peut avancer sans ça)</div>
+        <div class="legend-item"><div class="legend-dot" style="background:var(--accent5)"></div>P1 — Important (sprint courant)</div>
+        <div class="legend-item"><div class="legend-dot" style="background:var(--accent)"></div>P2 — Secondaire (sprint suivant)</div>
+        <div class="legend-item"><div class="legend-dot" style="background:var(--accent2)"></div>P3 — Polissage (fin de projet)</div>
+    </div>
+
+    <!-- ═══════════════════════════════════════════════════════
+         MODULE 1 — CORE & ECS
+    ═══════════════════════════════════════════════════════ -->
+    <div class="section-title">
+        <span class="section-num">MODULE 01</span>
+        <h2>Core & ECS — Le Cœur du Moteur</h2>
+        <span class="phase-badge phase-1">PHASE 1 — Mois 1-2</span>
+    </div>
+    <div class="module-desc">
+        <strong>Rôle :</strong> C'est la fondation absolue sur laquelle TOUT repose. Sans ce module, aucun autre ne peut exister. Il définit comment les données circulent en mémoire, comment les entités (joueur, Lycaon, une épée flottante) sont représentées, et comment la boucle principale orchestre chaque frame à 90Hz. L'architecture ECS (Entity Component System) garantit que des milliers d'entités sont traitées à vitesse maximale en exploitant le cache CPU — critique pour un VRMMO avec des centaines de monstres simultanés.
+        <br><br><strong>Dépendances en amont :</strong> Aucune. C'est le point zéro.<br>
+        <strong>Débloque :</strong> Tous les autres modules.
+    </div>
+    <div class="tbl-wrap">
+        <table>
+            <thead>
+            <tr>
+                <th>ID</th><th>Nom du Sous-module</th><th>Description détaillée</th><th>Fichiers C++ à créer</th><th>Priorité</th><th>Durée</th><th>Projets Open Source à étudier</th>
+            </tr>
+            </thead>
+            <tbody>
+            <tr>
+                <td class="sub-id">1.1</td>
+                <td class="sub-name">Système de Logs</td>
+                <td class="sub-desc">Journalisation structurée avec niveaux (TRACE, DEBUG, INFO, WARN, ERROR, CRITICAL). Sortie console colorée + fichier rotatif. Indispensable pour debugger la VR sans avoir un écran réel sous les yeux quand le casque est porté. Thread-safe obligatoire car la boucle principale est multi-threadée.</td>
+                <td class="sub-file">Logger.h / Logger.cpp<br>LogSink.h</td>
+                <td><span class="prio p0">P0 BLOQUANT</span></td>
+                <td class="dur">2 jours</td>
+                <td><div class="os-tags"><span class="os-tag">spdlog</span><span class="os-tag">quill</span></div></td>
+            </tr>
+            <tr>
+                <td class="sub-id">1.2</td>
+                <td class="sub-name">Allocateurs Mémoire Custom</td>
+                <td class="sub-desc">En VR à 90Hz, un malloc/free classique provoque des micro-pauses (stutter) fatales pour l'immersion. Implémenter : Arena Allocator (allocation linéaire ultra-rapide pour une frame entière, reset à la fin), Pool Allocator (objets de taille fixe comme les composants ECS), et Stack Allocator. Zéro fragmentation mémoire.</td>
+                <td class="sub-file">MemoryArena.h<br>PoolAllocator.h<br>StackAllocator.h<br>Allocator.h (interface)</td>
+                <td><span class="prio p0">P0 BLOQUANT</span></td>
+                <td class="dur">3 jours</td>
+                <td><div class="os-tags"><span class="os-tag">mimalloc</span><span class="os-tag">tlsf</span><span class="os-tag">rpmalloc</span></div></td>
+            </tr>
+            <tr>
+                <td class="sub-id">1.3</td>
+                <td class="sub-name">Types Fondamentaux & UUID</td>
+                <td class="sub-desc">Définir les types de base du moteur : UUID (identifiant unique pour chaque entité réseau), Handle (référence typée, plus sûre qu'un pointeur brut), typedefs (u8, u16, u32, u64, f32, f64). Empêche les erreurs de type entre les modules. Base de toute la sérialisation réseau.</td>
+                <td class="sub-file">Types.h<br>UUID.h / UUID.cpp<br>Handle.h</td>
+                <td><span class="prio p0">P0 BLOQUANT</span></td>
+                <td class="dur">1 jour</td>
+                <td><div class="os-tags"><span class="os-tag">sole/uuid4</span></div></td>
+            </tr>
+            <tr>
+                <td class="sub-id">1.4</td>
+                <td class="sub-name">Bibliothèque Mathématique SIMD</td>
+                <td class="sub-desc">Wrapper autour de GLM optimisé SIMD (Single Instruction Multiple Data) pour que le CPU traite 4 vecteurs en une seule instruction. Inclut : Vec2/3/4, Mat4x4, Quaternion (rotations 3D sans gimbal lock), Ray (pour le gaze raycast), Frustum (pour le culling). Les quaternions sont vitaux pour la rotation de la tête en VR.</td>
+                <td class="sub-file">Math.h<br>Vector.h<br>Matrix.h<br>Quaternion.h<br>Ray.h<br>Frustum.h</td>
+                <td><span class="prio p0">P0 BLOQUANT</span></td>
+                <td class="dur">2 jours</td>
+                <td><div class="os-tags"><span class="os-tag">glm</span><span class="os-tag">DirectXMath</span><span class="os-tag">cglm</span></div></td>
+            </tr>
+            <tr>
+                <td class="sub-id">1.5</td>
+                <td class="sub-name">ECS Core — Registre d'Entités</td>
+                <td class="sub-desc">Le moteur de toute la logique du jeu. Une entité = un uint32_t (ID pur, pas d'objet). Les composants sont des structs de données pures stockées dans des arrays contigus (cache-friendly). EnTT fournit le registre, les vues filtrées, et la gestion du cycle de vie. Permet de gérer 100 000 monstres sans drop de FPS.</td>
+                <td class="sub-file">Registry.h<br>Entity.h<br>Component.h<br>Components/TransformComponent.h<br>Components/TagComponent.h</td>
+                <td><span class="prio p0">P0 BLOQUANT</span></td>
+                <td class="dur">4 jours</td>
+                <td><div class="os-tags"><span class="os-tag">EnTT</span><span class="os-tag">flecs</span><span class="os-tag">mustache</span></div></td>
+            </tr>
+            <tr>
+                <td class="sub-id">1.6</td>
+                <td class="sub-name">Scheduler de Systèmes</td>
+                <td class="sub-desc">Définit l'ordre d'exécution des systèmes ECS à chaque frame. Ordre critique : Input → Physics → AI → Animation → Rendering. Gère les dépendances entre systèmes (ex: le RenderSystem doit attendre que PhysicsSystem ait mis à jour les positions). Inclut le multi-threading via une task queue.</td>
+                <td class="sub-file">SystemScheduler.h / .cpp<br>SystemGroup.h<br>ExecutionOrder.h</td>
+                <td><span class="prio p0">P0 BLOQUANT</span></td>
+                <td class="dur">3 jours</td>
+                <td><div class="os-tags"><span class="os-tag">EnTT scheduler</span><span class="os-tag">taskflow</span></div></td>
+            </tr>
+            <tr>
+                <td class="sub-id">1.7</td>
+                <td class="sub-name">Event Bus Asynchrone</td>
+                <td class="sub-desc">Système de communication découplé entre modules. Exemple : quand Lycaon meurt (PhysicsSystem détecte HP=0), il émet un événement BossDeathEvent. Le NetworkSystem, l'AudioSystem et le LootSystem l'écoutent indépendamment. Évite les dépendances cycliques entre modules. Pattern Observer thread-safe.</td>
+                <td class="sub-file">EventBus.h / .cpp<br>EventQueue.h<br>Events/GameEvents.h</td>
+                <td><span class="prio p1">P1 IMPORTANT</span></td>
+                <td class="dur">3 jours</td>
+                <td><div class="os-tags"><span class="os-tag">eventpp</span><span class="os-tag">EnTT signals</span></div></td>
+            </tr>
+            <tr>
+                <td class="sub-id">1.8</td>
+                <td class="sub-name">Timer & Delta Time</td>
+                <td class="sub-desc">Timer haute précision (std::chrono nanoseconde). Calcule le DeltaTime (temps entre deux frames) pour que la physique et les animations soient indépendantes du FPS. Fixed Timestep pour la physique (120Hz constant peu importe le rendu). Variable Timestep pour le rendu. Synchro avec le V-Sync OpenXR.</td>
+                <td class="sub-file">Timer.h / Timer.cpp<br>FrameTimer.h<br>FixedTimestep.h</td>
+                <td><span class="prio p0">P0 BLOQUANT</span></td>
+                <td class="dur">1 jour</td>
+                <td><div class="os-tags"><span class="os-tag">std::chrono C++20</span></div></td>
+            </tr>
+            <tr>
+                <td class="sub-id">1.9</td>
+                <td class="sub-name">Game Loop Principale Multi-threadée</td>
+                <td class="sub-desc">Le chef d'orchestre du moteur. Lance 3 threads séparés : Thread Principal (rendu Vulkan à 90Hz synchronisé OpenXR), Thread BCI/Neural (lecture OpenBCI à 500Hz), Thread Réseau (tick serveur à 60Hz). La boucle principale ne doit JAMAIS dépasser 11ms par frame pour éviter la cinétose en VR. Implémente le pattern "Double Buffer" pour éviter les data races entre le thread de mise à jour et le thread de rendu.</td>
+                <td class="sub-file">Engine.h / Engine.cpp<br>MainLoop.h<br>ThreadPool.h<br>DoubleBuffer.h</td>
+                <td><span class="prio p0">P0 BLOQUANT</span></td>
+                <td class="dur">5 jours</td>
+                <td><div class="os-tags"><span class="os-tag">std::thread C++20</span><span class="os-tag">taskflow</span><span class="os-tag">enkiTS</span></div></td>
+            </tr>
+            </tbody>
+        </table>
+    </div>
+
+    <!-- MODULE 2 -->
+    <div class="section-title">
+        <span class="section-num">MODULE 02</span>
+        <h2>Platform & Windowing — Abstraction OS</h2>
+        <span class="phase-badge phase-1">PHASE 1 — Mois 1-2</span>
+    </div>
+    <div class="module-desc">
+        <strong>Rôle :</strong> Isole tout le code qui dépend du système d'exploitation (Windows, Linux). Si demain vous portez le moteur sur une autre plateforme, seul ce module change. Gère la création de la fenêtre de preview (utile pour débugger sans casque), la capture des entrées clavier/souris pour l'éditeur (pas pour le jeu), et le cycle de vie de l'application.
+        <br><br><strong>Dépendances :</strong> Module 1 (Logger, Types).<br>
+        <strong>Débloque :</strong> Module 3 (le renderer a besoin d'une surface où dessiner).
+    </div>
+    <div class="tbl-wrap">
+        <table>
+            <thead><tr><th>ID</th><th>Nom</th><th>Description détaillée</th><th>Fichiers C++</th><th>Priorité</th><th>Durée</th><th>Open Source Référence</th></tr></thead>
+            <tbody>
+            <tr>
+                <td class="sub-id">2.1</td>
+                <td class="sub-name">Abstraction OS (HAL)</td>
+                <td class="sub-desc">Interface abstraite Platform.h qui expose les fonctions OS (créer une fenêtre, obtenir le temps, lire un fichier) de manière identique sur Windows et Linux. Les classes concrètes WindowsPlatform.cpp et LinuxPlatform.cpp implémentent les appels natifs (Win32 / X11/Wayland). Le reste du moteur ne voit que Platform::GetTime() sans savoir sur quel OS il tourne.</td>
+                <td class="sub-file">Platform.h<br>WindowsPlatform.cpp<br>LinuxPlatform.cpp</td>
+                <td><span class="prio p0">P0 BLOQUANT</span></td>
+                <td class="dur">2 jours</td>
+                <td><div class="os-tags"><span class="os-tag">SDL2</span><span class="os-tag">GLFW source</span></div></td>
+            </tr>
+            <tr>
+                <td class="sub-id">2.2</td>
+                <td class="sub-name">Gestion Fenêtre GLFW</td>
+                <td class="sub-desc">Crée la fenêtre de preview PC (utilisée pour l'éditeur et le debug sans casque). Configure le contexte Vulkan surface (VkSurfaceKHR via GLFW). Gère le redimensionnement, les événements de fermeture et le mode plein écran. En mode VR actif, cette fenêtre sert de "mirror" (copie de la vue du casque sur l'écran PC).</td>
+                <td class="sub-file">Window.h / Window.cpp<br>WindowEvents.h</td>
+                <td><span class="prio p0">P0 BLOQUANT</span></td>
+                <td class="dur">2 jours</td>
+                <td><div class="os-tags"><span class="os-tag">GLFW</span><span class="os-tag">SDL2</span></div></td>
+            </tr>
+            <tr>
+                <td class="sub-id">2.3</td>
+                <td class="sub-name">Input Manager (Éditeur uniquement)</td>
+                <td class="sub-desc">Gestion clavier/souris UNIQUEMENT pour l'éditeur et les outils de debug. Le jeu lui-même ne passe jamais par ce système. Permet de naviguer dans l'inspecteur d'entités ou de déplacer la caméra de preview pendant le développement sans casque. Basé sur les callbacks GLFW.</td>
+                <td class="sub-file">InputManager.h / .cpp<br>KeyCodes.h<br>MouseState.h</td>
+                <td><span class="prio p2">P2</span></td>
+                <td class="dur">2 jours</td>
+                <td><div class="os-tags"><span class="os-tag">GLFW input</span></div></td>
+            </tr>
+            <tr>
+                <td class="sub-id">2.4</td>
+                <td class="sub-name">Profiler CPU Interne</td>
+                <td class="sub-desc">Outils de mesure de performance pour identifier les goulots d'étranglement. Marque le début/fin de chaque section de code (PROFILE_SCOPE("EyeTracking")). Affiche un timeline dans l'éditeur ImGui montrant combien de millisecondes chaque système prend par frame. Vital pour garantir les 11ms max en VR.</td>
+                <td class="sub-file">Profiler.h / Profiler.cpp<br>ProfilerScope.h<br>ProfilerUI.h</td>
+                <td><span class="prio p2">P2</span></td>
+                <td class="dur">2 jours</td>
+                <td><div class="os-tags"><span class="os-tag">Tracy Profiler</span><span class="os-tag">Optick</span></div></td>
+            </tr>
+            </tbody>
+        </table>
+    </div>
+
+    <!-- MODULE 3 -->
+    <div class="section-title">
+        <span class="section-num">MODULE 03</span>
+        <h2>Renderer Vulkan — Pipeline Graphique Complet</h2>
+        <span class="phase-badge phase-2">PHASE 2 — Mois 3-6</span>
+    </div>
+    <div class="module-desc">
+        <strong>Rôle :</strong> Le module le plus long et le plus critique. Transforme les données 3D (positions, textures, lumières) en images affichées dans le casque VR. Doit impérativement générer DEUX images par frame (œil gauche + œil droit) en moins de 11ms. Le rendu fovéal (sous-module 3.13) est la technologie clé qui rend possible un rendu photoréaliste sur des configurations modestes en concentrant les calculs GPU là où l'œil regarde.
+        <br><br><strong>Dépendances :</strong> Modules 1 + 2. Nécessite le Vulkan SDK installé.<br>
+        <strong>Débloque :</strong> Module 4 (VR), Module 10 (Éditeur ImGui).
+    </div>
+    <div class="tbl-wrap">
+        <table>
+            <thead><tr><th>ID</th><th>Nom</th><th>Description détaillée</th><th>Fichiers C++</th><th>Priorité</th><th>Durée</th><th>Open Source Référence</th></tr></thead>
+            <tbody>
+            <tr>
+                <td class="sub-id">3.1</td>
+                <td class="sub-name">Init Vulkan — Instance & Device</td>
+                <td class="sub-desc">Point d'entrée de Vulkan. Crée l'instance VkInstance, sélectionne le GPU physique (VkPhysicalDevice) le plus puissant, crée le device logique (VkDevice) avec les queues Graphics, Compute et Transfer. Active les layers de validation (VK_LAYER_KHRONOS_validation) en mode Debug. Active les extensions VR obligatoires : VK_KHR_multiview pour le stereo rendering.</td>
+                <td class="sub-file">VulkanContext.h / .cpp<br>VulkanDevice.h<br>VulkanQueues.h</td>
+                <td><span class="prio p0">P0 BLOQUANT</span></td>
+                <td class="dur">4 jours</td>
+                <td><div class="os-tags"><span class="os-tag">vkguide.dev</span><span class="os-tag">vulkan-tutorial.com</span><span class="os-tag">vk-bootstrap</span></div></td>
+            </tr>
+            <tr>
+                <td class="sub-id">3.2</td>
+                <td class="sub-name">Swapchain & Surface</td>
+                <td class="sub-desc">Gère la chaîne d'images affichées à l'écran (2 ou 3 images en rotation — double/triple buffering). En VR, la swapchain principale est gérée par OpenXR (pas par GLFW). Ce sous-module crée les deux swapchains séparées pour les yeux gauche et droit, puis synchronise leur présentation avec le compositeur du casque via xrEndFrame.</td>
+                <td class="sub-file">Swapchain.h / .cpp<br>VulkanSurface.h<br>XRSwapchain.h</td>
+                <td><span class="prio p0">P0 BLOQUANT</span></td>
+                <td class="dur">3 jours</td>
+                <td><div class="os-tags"><span class="os-tag">OpenXR-Vk samples</span></div></td>
+            </tr>
+            <tr>
+                <td class="sub-id">3.3</td>
+                <td class="sub-name">Pipeline Graphique & Shaders</td>
+                <td class="sub-desc">Définit la pipeline de rendu complète : étapes Vertex Shader (transformation des sommets 3D) et Fragment Shader (calcul de la couleur de chaque pixel). Les shaders sont écrits en GLSL/HLSL et compilés en SPIR-V (format binaire Vulkan) via glslc. Inclut un système de hot-reload des shaders (recompilation sans relancer le moteur) pour accélérer le dev.</td>
+                <td class="sub-file">Pipeline.h / .cpp<br>Shader.h / .cpp<br>ShaderCompiler.h<br>shaders/mesh.vert<br>shaders/mesh.frag</td>
+                <td><span class="prio p0">P0 BLOQUANT</span></td>
+                <td class="dur">5 jours</td>
+                <td><div class="os-tags"><span class="os-tag">glslc (shaderc)</span><span class="os-tag">SPIRV-Cross</span></div></td>
+            </tr>
+            <tr>
+                <td class="sub-id">3.4</td>
+                <td class="sub-name">Render Pass & Framebuffers</td>
+                <td class="sub-desc">Un Render Pass définit comment Vulkan lit et écrit dans les images (color attachment, depth buffer). Pour la VR, on a besoin d'au moins 2 render passes : le Main Pass (géométrie 3D) et le Resolve Pass (résolution MSAA). Les Framebuffers attachent les images de la swapchain à ces passes. Architecture en "passes" pour faciliter l'ajout du rendu fovéal plus tard.</td>
+                <td class="sub-file">RenderPass.h / .cpp<br>Framebuffer.h<br>RenderGraph.h</td>
+                <td><span class="prio p0">P0 BLOQUANT</span></td>
+                <td class="dur">3 jours</td>
+                <td><div class="os-tags"><span class="os-tag">RenderGraph (themaister)</span></div></td>
+            </tr>
+            <tr>
+                <td class="sub-id">3.5</td>
+                <td class="sub-name">Gestion Mémoire GPU (VMA)</td>
+                <td class="sub-desc">La gestion manuelle de la mémoire GPU en Vulkan est extrêmement complexe. VMA (Vulkan Memory Allocator d'AMD) est la bibliothèque standard de l'industrie. Gère les allocations de buffers (vertex, index, uniform) et d'images (textures) avec des stratégies optimisées (staging buffers pour le transfert CPU→GPU, GPU-only memory pour les assets statiques).</td>
+                <td class="sub-file">GPUAllocator.h / .cpp<br>VulkanBuffer.h<br>VulkanImage.h</td>
+                <td><span class="prio p0">P0 BLOQUANT</span></td>
+                <td class="dur">2 jours</td>
+                <td><div class="os-tags"><span class="os-tag">VulkanMemoryAllocator</span></div></td>
+            </tr>
+            <tr>
+                <td class="sub-id">3.6</td>
+                <td class="sub-name">Chargement de Meshes (glTF 2.0)</td>
+                <td class="sub-desc">Chargement des modèles 3D depuis le format glTF 2.0 (standard industrie). Lit la géométrie (vertex positions, normals, UVs, tangents), les matériaux PBR (Physically Based Rendering), les animations squelettiques et les scènes hiérarchiques. Gère le chargement asynchrone (le mesh de Lycaon est chargé en arrière-plan pendant que le joueur traverse la forêt).</td>
+                <td class="sub-file">MeshLoader.h / .cpp<br>Mesh.h<br>MeshCache.h<br>AsyncAssetLoader.h</td>
+                <td><span class="prio p1">P1 IMPORTANT</span></td>
+                <td class="dur">4 jours</td>
+                <td><div class="os-tags"><span class="os-tag">fastgltf</span><span class="os-tag">tinygltf</span></div></td>
+            </tr>
+            <tr>
+                <td class="sub-id">3.7</td>
+                <td class="sub-name">Gestion des Textures</td>
+                <td class="sub-desc">Chargement des textures compressées GPU (format DDS/KTX2 avec compression BCn/ASTC). Le format KTX2 est clé car il permet le streaming partiel : on charge d'abord les mips basses résolution (aperçu flou immédiat) puis les mips haute résolution progressivement. Évite les "pop-in" de textures en VR qui brisent l'immersion.</td>
+                <td class="sub-file">Texture.h / .cpp<br>TextureCache.h<br>TextureStreamer.h</td>
+                <td><span class="prio p1">P1 IMPORTANT</span></td>
+                <td class="dur">3 jours</td>
+                <td><div class="os-tags"><span class="os-tag">KTX-Software (Khronos)</span><span class="os-tag">stb_image</span></div></td>
+            </tr>
+            <tr>
+                <td class="sub-id">3.8</td>
+                <td class="sub-name">Descriptors & Uniform Buffers</td>
+                <td class="sub-desc">En Vulkan, envoyer des données au shader (matrices de caméra, lumières, couleurs) passe par les Descriptor Sets. Ce sous-module crée un DescriptorManager qui pré-alloue de grands pools de descripteurs, évitant les allocations dynamiques coûteuses par frame. Les Uniform Buffers gèrent les données qui changent chaque frame (matrices view/projection des deux yeux VR).</td>
+                <td class="sub-file">DescriptorManager.h / .cpp<br>DescriptorSetLayout.h<br>UniformBuffer.h</td>
+                <td><span class="prio p1">P1 IMPORTANT</span></td>
+                <td class="dur">3 jours</td>
+                <td><div class="os-tags"><span class="os-tag">vkguide.dev (ch.4)</span></div></td>
+            </tr>
+            <tr>
+                <td class="sub-id">3.9</td>
+                <td class="sub-name">Forward+ Rendering Pipeline</td>
+                <td class="sub-desc">Algorithme de rendu moderne qui gère efficacement des centaines de sources lumineuses dynamiques (torches dans un donjon, sorts magiques de 50 joueurs). Un Compute Shader pré-calcule quelles lumières affectent chaque tuile de l'écran (Light Culling). Bien plus adapté que le Deferred Rendering pour la VR car il évite les problèmes de transparence et MSAA.</td>
+                <td class="sub-file">ForwardPlusRenderer.h / .cpp<br>LightCullingPass.h<br>LightGrid.h</td>
+                <td><span class="prio p1">P1 IMPORTANT</span></td>
+                <td class="dur">6 jours</td>
+                <td><div class="os-tags"><span class="os-tag">Forward+ (3DGE paper)</span><span class="os-tag">Hazel Engine</span></div></td>
+            </tr>
+            <tr>
+                <td class="sub-id">3.10</td>
+                <td class="sub-name">Occlusion & Frustum Culling</td>
+                <td class="sub-desc">N'envoie au GPU que ce que le joueur peut RÉELLEMENT voir. Frustum Culling : élimine tout ce qui est hors du champ de vision des deux yeux (calcul sur 2 frustums VR). Occlusion Culling : masque la géométrie cachée derrière les murs (via Hierarchical Z-Buffer). Réduit les draw calls de 60 à 90% dans un environnement urbain dense comme Néo-Zénith.</td>
+                <td class="sub-file">CullingSystem.h / .cpp<br>FrustumCuller.h<br>OcclusionQueries.h</td>
+                <td><span class="prio p1">P1 IMPORTANT</span></td>
+                <td class="dur">4 jours</td>
+                <td><div class="os-tags"><span class="os-tag">Mastering Graphics (blog)</span><span class="os-tag">GPU Gems</span></div></td>
+            </tr>
+            <tr>
+                <td class="sub-id">3.11</td>
+                <td class="sub-name">Shadow Mapping</td>
+                <td class="sub-desc">Calcul des ombres dynamiques via Shadow Maps. Implémente le Cascaded Shadow Maps (CSM) : plusieurs niveaux de résolution d'ombres selon la distance (haute résolution près du joueur, basse loin). Les ombres baked (pré-calculées) pour les décors statiques sont stockées dans des lightmaps pour les configurations modestes (GTX 1060). Choix dynamique à l'exécution selon le GPU détecté.</td>
+                <td class="sub-file">ShadowPass.h / .cpp<br>CascadedShadowMap.h<br>LightmapLoader.h</td>
+                <td><span class="prio p2">P2</span></td>
+                <td class="dur">4 jours</td>
+                <td><div class="os-tags"><span class="os-tag">LearnOpenGL (Shadow Maps)</span><span class="os-tag">Xenko engine source</span></div></td>
+            </tr>
+            <tr>
+                <td class="sub-id">3.12</td>
+                <td class="sub-name">Stereo VR Rendering (Double Passe)</td>
+                <td class="sub-desc">CRITIQUE VR. Rend la scène deux fois : une pour l'œil gauche, une pour l'œil droit, avec des matrices de projection et des positions de caméra légèrement différentes (Inter-Pupillary Distance ~63mm). Implémente le Single-Pass Instanced Rendering (dessine les deux yeux en un seul draw call grâce à VK_KHR_multiview) pour diviser par deux la charge GPU du stereo.</td>
+                <td class="sub-file">StereoRenderer.h / .cpp<br>EyeMatrices.h<br>StereoFramebuffer.h</td>
+                <td><span class="prio p0">P0 BLOQUANT</span></td>
+                <td class="dur">5 jours</td>
+                <td><div class="os-tags"><span class="os-tag">OpenXR-Vulkan-Example</span><span class="os-tag">XR_KHR_multiview</span></div></td>
+            </tr>
+            <tr>
+                <td class="sub-id">3.13</td>
+                <td class="sub-name">Foveated Rendering Dynamique</td>
+                <td class="sub-desc">LA technologie différenciante du moteur. Le Fragment Shader reçoit la position du regard (depuis l'Eye-Tracking, Module 4). La zone centrale de 10° autour du point de fixation est rendue à 100% de résolution. La périphérie est rendue à 25-50%. Économise 50-70% de bande passante GPU. Sur les configs modestes, rend possible un rendu visuellement riche qu'une simple RTX 3050 ne pourrait jamais tenir autrement.</td>
+                <td class="sub-file">FoveatedPass.h / .cpp<br>FoveationMap.h<br>shaders/foveated_resolve.comp</td>
+                <td><span class="prio p0">P0 BLOQUANT</span></td>
+                <td class="dur">6 jours</td>
+                <td><div class="os-tags"><span class="os-tag">XR_FB_foveation</span><span class="os-tag">Tobii Foveated paper</span></div></td>
+            </tr>
+            <tr>
+                <td class="sub-id">3.14</td>
+                <td class="sub-name">Post-Processing</td>
+                <td class="sub-desc">Passes de traitement de l'image finale : Bloom (halos lumineux sur les sorts), Tone Mapping (HDR → SDR), Color Grading (ambiance visuelle par zone : bleu froid pour les Abysses de Ktarnidd, rouge chaud pour la Forge de Kael-Gorgor), Chromatic Aberration (effet de distorsion lentille pour les sorts de magie), et Vignette (assombrissement des bords pour l'immersion).</td>
+                <td class="sub-file">PostProcess.h / .cpp<br>BloomPass.h<br>ToneMappingPass.h<br>ColorGradePass.h</td>
+                <td><span class="prio p2">P2</span></td>
+                <td class="dur">4 jours</td>
+                <td><div class="os-tags"><span class="os-tag">LearnOpenGL (Post)</span><span class="os-tag">ACES Tonemap</span></div></td>
+            </tr>
+            <tr>
+                <td class="sub-id">3.15</td>
+                <td class="sub-name">HAL — Abstraction du Renderer</td>
+                <td class="sub-desc">Interface abstraite RenderAPI.h qui cache les détails de Vulkan. Si dans 3 ans vous décidez d'ajouter un backend DirectX 12 (pour Xbox) ou Metal (pour Apple Vision Pro), seule l'implémentation change, pas le reste du moteur. Pattern Pimpl (Pointer to Implementation) pour garder les headers propres et réduire les temps de compilation.</td>
+                <td class="sub-file">RenderAPI.h<br>VulkanRenderAPI.cpp<br>RenderCommand.h</td>
+                <td><span class="prio p1">P1 IMPORTANT</span></td>
+                <td class="dur">3 jours</td>
+                <td><div class="os-tags"><span class="os-tag">Hazel Engine (Cherno)</span><span class="os-tag">Wicked Engine</span></div></td>
+            </tr>
+            </tbody>
+        </table>
+    </div>
+
+    <!-- MODULE 4 -->
+    <div class="section-title">
+        <span class="section-num">MODULE 04</span>
+        <h2>VR & Eye-Tracking — OpenXR Layer</h2>
+        <span class="phase-badge phase-2">PHASE 2 — Mois 4-5</span>
+    </div>
+    <div class="module-desc">
+        <strong>Rôle :</strong> Le cerveau sensoriel du moteur pour le joueur allongé. Ce module transforme le casque VR en périphérique d'entrée principal. L'Eye-Tracking est au cœur de TOUTE l'interaction avec le monde (viser Lycaon, déclencher un sort, naviguer dans les menus, se déplacer). Le sous-module 4.4 (Gaze Raycast) est la colonne vertébrale du gameplay sans manettes.
+        <br><br><strong>Dépendances :</strong> Modules 1, 2, 3 (le renderer doit exister pour attacher OpenXR).<br>
+        <strong>Débloque :</strong> Module 7 (BCI peut être fusionné avec les données de regard), Module 8 (IA vocale contextualisée par la cible regardée).
+    </div>
+    <div class="tbl-wrap">
+        <table>
+            <thead><tr><th>ID</th><th>Nom</th><th>Description détaillée</th><th>Fichiers C++</th><th>Priorité</th><th>Durée</th><th>Open Source Référence</th></tr></thead>
+            <tbody>
+            <tr>
+                <td class="sub-id">4.1</td>
+                <td class="sub-name">Initialisation Session OpenXR</td>
+                <td class="sub-desc">Crée l'instance OpenXR, détecte le runtime du casque actif (Meta, Somnium, etc.), crée la session (XrSession) et l'espace de référence (XrSpace en mode STAGE = sol de la pièce). Gère le cycle de vie de la session (états IDLE → READY → SYNCHRONIZED → VISIBLE → FOCUSED). Une session mal gérée = crash au démarrage du casque.</td>
+                <td class="sub-file">XRSession.h / .cpp<br>XRInstance.h<br>XRLifecycle.h</td>
+                <td><span class="prio p0">P0 BLOQUANT</span></td>
+                <td class="dur">4 jours</td>
+                <td><div class="os-tags"><span class="os-tag">OpenXR-SDK (Khronos)</span><span class="os-tag">hello_xr sample</span></div></td>
+            </tr>
+            <tr>
+                <td class="sub-id">4.2</td>
+                <td class="sub-name">Head Tracking 6DoF</td>
+                <td class="sub-desc">Récupère la position (X,Y,Z) et l'orientation (quaternion) de la tête du joueur 90 à 120 fois par seconde via xrLocateSpace. Ces données alimentent la transformation de la caméra VR dans le renderer. En mode "Allongé", le TransformComponent de la caméra est corrigé par la matrice du sous-module 4.6 pour redresser l'horizon virtuel.</td>
+                <td class="sub-file">XRHeadTracker.h / .cpp<br>XRPose.h</td>
+                <td><span class="prio p0">P0 BLOQUANT</span></td>
+                <td class="dur">2 jours</td>
+                <td><div class="os-tags"><span class="os-tag">OpenXR xrLocateSpace</span></div></td>
+            </tr>
+            <tr>
+                <td class="sub-id">4.3</td>
+                <td class="sub-name">Eye-Tracking — Vecteur de Regard</td>
+                <td class="sub-desc">Utilise l'extension OpenXR XR_EXT_eye_gaze_interaction pour récupérer un XrPosef représentant la direction exacte du regard combiné des deux yeux à 120Hz. Gère la calibration (demande au joueur de fixer 5 points au démarrage) et le filtrage du tremblement naturel (saccades microscopiques) via un filtre de Kalman pour éviter que la cible bouge constamment.</td>
+                <td class="sub-file">XREyeTracker.h / .cpp<br>GazeFilter.h<br>KalmanFilter.h</td>
+                <td><span class="prio p0">P0 BLOQUANT</span></td>
+                <td class="dur">4 jours</td>
+                <td><div class="os-tags"><span class="os-tag">XR_EXT_eye_gaze</span><span class="os-tag">OpenXR Eye Tracking samples</span></div></td>
+            </tr>
+            <tr>
+                <td class="sub-id">4.4</td>
+                <td class="sub-name">Gaze Raycast System (LE CŒUR DU GAMEPLAY)</td>
+                <td class="sub-desc">Transforme le vecteur de regard (direction des yeux dans l'espace 3D) en un rayon de physique. Ce rayon teste les collisions avec toutes les entités ECS ayant un composant GazeTargetComponent. Retourne : l'entité visée, la distance, le point d'impact 3D. Alimente le système de ciblage de Lycaon, l'activation des sorts, la navigation (regarder un flux = se déplacer), et l'ouverture des dialogues PNJ. Fréquence : 120Hz, latence max : 3ms.</td>
+                <td class="sub-file">GazeRaycastSystem.h / .cpp<br>GazeTargetComponent.h<br>GazeFocusEvent.h</td>
+                <td><span class="prio p0">P0 BLOQUANT</span></td>
+                <td class="dur">5 jours</td>
+                <td><div class="os-tags"><span class="os-tag">Jolt Physics (raycasts)</span><span class="os-tag">Tobii XR SDK</span></div></td>
+            </tr>
+            <tr>
+                <td class="sub-id">4.5</td>
+                <td class="sub-name">Matrices de Projection Stéréo</td>
+                <td class="sub-desc">Calcule les matrices View et Projection spécifiques à chaque œil depuis OpenXR (XrView). La matrice Projection n'est PAS symétrique en VR (les lentilles des casques induisent une distorsion). Fournit au renderer les ViewProjectionUBO (Uniform Buffer Objects) contenant les 2 matrices combinées à chaque frame pour le Single-Pass Stereo Rendering.</td>
+                <td class="sub-file">XRProjection.h / .cpp<br>ViewProjectionUBO.h</td>
+                <td><span class="prio p0">P0 BLOQUANT</span></td>
+                <td class="dur">2 jours</td>
+                <td><div class="os-tags"><span class="os-tag">OpenXR xrLocateViews</span></div></td>
+            </tr>
+            <tr>
+                <td class="sub-id">4.6</td>
+                <td class="sub-name">Mode Allongé — Recalibration Spatiale</td>
+                <td class="sub-desc">Quand le joueur s'allonge, le casque détecte que la tête regarde le plafond (vecteur "up" du gyroscope pointe vers le sol). Ce module applique une rotation corrective (Pitch -90°) sur toutes les matrices de vue OpenXR pour que l'horizon virtuel reste horizontal. Inclut une calibration au démarrage ("Allongez-vous et fixez un point"). Sauvegarde la posture dans un fichier de config JSON.</td>
+                <td class="sub-file">RecumbentMode.h / .cpp<br>PostureCalibration.h<br>data/posture_config.json</td>
+                <td><span class="prio p0">P0 BLOQUANT</span></td>
+                <td class="dur">3 jours</td>
+                <td><div class="os-tags"><span class="os-tag">OpenXR reference spaces</span></div></td>
+            </tr>
+            <tr>
+                <td class="sub-id">4.7</td>
+                <td class="sub-name">Reprojection Asynchrone (ASW)</td>
+                <td class="sub-desc">Si le moteur rate le budget de 11ms et ne peut générer que 45 FPS, ce système génère des frames intermédiaires synthétiques. Analyse le motion vector entre la frame N et N-1, prédit la frame N+1 en extrapolant les mouvements. Le casque reçoit 90 FPS sans que le GPU ait travaillé pour 90 frames. Implémenté via VK_EXT_fragment_shading_rate ou en coopération avec le runtime OpenXR du casque.</td>
+                <td class="sub-file">AsyncReprojection.h / .cpp<br>MotionVectorPass.h</td>
+                <td><span class="prio p2">P2</span></td>
+                <td class="dur">5 jours</td>
+                <td><div class="os-tags"><span class="os-tag">Meta ASW docs</span><span class="os-tag">SteamVR motion smoothing</span></div></td>
+            </tr>
+            <tr>
+                <td class="sub-id">4.8</td>
+                <td class="sub-name">Composant ECS EyeGazeComponent</td>
+                <td class="sub-desc">Le pont entre le hardware VR et l'ECS. Ce composant est attaché à l'entité "Joueur" et contient : le vecteur de direction du regard (Vec3 direction), l'entité actuellement ciblée (uint32_t focusedEntity), le temps de focus cumulé (float continuousFocusTime), et un flag de clignement volontaire (bool intentionalBlink). Tous les systèmes ECS qui ont besoin du regard lisent ce composant.</td>
+                <td class="sub-file">EyeGazeComponent.h<br>EyeGazeUpdateSystem.h</td>
+                <td><span class="prio p0">P0 BLOQUANT</span></td>
+                <td class="dur">1 jour</td>
+                <td><div class="os-tags"><span class="os-tag">EnTT components</span></div></td>
+            </tr>
+            </tbody>
+        </table>
+    </div>
+
+    <!-- MODULE 5 -->
+    <div class="section-title">
+        <span class="section-num">MODULE 05</span>
+        <h2>Physics — Jolt Physics Engine</h2>
+        <span class="phase-badge phase-2">PHASE 2 — Mois 5-6</span>
+    </div>
+    <div class="module-desc">
+        <strong>Rôle :</strong> Simule les lois de la physique dans le monde virtuel. Indispensable pour les collisions (Lycaon ne peut pas traverser les murs), les projectiles (trajectoire d'une flèche télépathique), et le Full-Body IK (reconstituition du corps entier depuis la position de la tête uniquement). Jolt Physics est choisi car il est massivement multi-threadé, open source, et utilisé par Horizon: Forbidden West.
+        <br><br><strong>Dépendances :</strong> Modules 1, 4 (le raycast physique pour le regard).<br>
+        <strong>Débloque :</strong> Modules 6 (audio occlusion), 8 (IA boss pathfinding).
+    </div>
+    <div class="tbl-wrap">
+        <table>
+            <thead><tr><th>ID</th><th>Nom</th><th>Description détaillée</th><th>Fichiers C++</th><th>Priorité</th><th>Durée</th><th>Open Source Référence</th></tr></thead>
+            <tbody>
+            <tr>
+                <td class="sub-id">5.1</td>
+                <td class="sub-name">Init Monde Physique Jolt</td>
+                <td class="sub-desc">Configure le monde physique Jolt : allocateurs de mémoire, nombre de threads (utilise tous les cœurs CPU disponibles), layer system (sépare les layers : STATIC pour les décors, DYNAMIC pour les monstres, SENSOR pour les zones de trigger). Un JobSystem multi-threadé Jolt peut simuler des milliers de corps rigides en parallèle sans bloquer le thread de rendu.</td>
+                <td class="sub-file">PhysicsWorld.h / .cpp<br>PhysicsLayers.h<br>JoltJobSystem.h</td>
+                <td><span class="prio p0">P0 BLOQUANT</span></td>
+                <td class="dur">3 jours</td>
+                <td><div class="os-tags"><span class="os-tag">JoltPhysics (jrouwe)</span><span class="os-tag">JoltPhysics Samples</span></div></td>
+            </tr>
+            <tr>
+                <td class="sub-id">5.2</td>
+                <td class="sub-name">Rigid Bodies</td>
+                <td class="sub-desc">Crée les formes physiques pour chaque objet du jeu. Les formes disponibles : Box (coffres, caisses), Capsule (avatars joueurs — meilleure performance pour l'IK), Sphere (projectiles), Mesh (décors statiques complexes comme les rochers). Chaque entité ECS avec un PhysicsBodyComponent reçoit un BodyID Jolt. Le système synchronise les positions Jolt → TransformComponent ECS chaque frame.</td>
+                <td class="sub-file">RigidBody.h / .cpp<br>CollisionShape.h<br>PhysicsBodyComponent.h</td>
+                <td><span class="prio p0">P0 BLOQUANT</span></td>
+                <td class="dur">3 jours</td>
+                <td><div class="os-tags"><span class="os-tag">JoltPhysics</span></div></td>
+            </tr>
+            <tr>
+                <td class="sub-id">5.3</td>
+                <td class="sub-name">Collision Detection Continues (CCD)</td>
+                <td class="sub-desc">La détection de collision standard (discrète) rate les objets rapides : si une épée télépathique va à 200m/s, elle peut traverser un ennemi entre deux frames. La CCD calcule des volumes de déplacement (comme un tunnel) au lieu de simples points. Obligatoire pour toutes les entités rapides : projectiles, attaques de boss, et le rush de Lycaon (60 km/h).</td>
+                <td class="sub-file">CollisionSystem.h / .cpp<br>CCDSettings.h</td>
+                <td><span class="prio p1">P1 IMPORTANT</span></td>
+                <td class="dur">2 jours</td>
+                <td><div class="os-tags"><span class="os-tag">Jolt CCD docs</span></div></td>
+            </tr>
+            <tr>
+                <td class="sub-id">5.4</td>
+                <td class="sub-name">Physics Queries</td>
+                <td class="sub-desc">API pour interroger le monde physique depuis le code de jeu. RayCast (utilisé par le GazeRaycastSystem pour la détection de cible), ShapeCast (vérifier si une zone est libre pour spawner un monstre), OverlapTest (détecter tous les ennemis dans un rayon de 5m autour d'une explosion de sort). Interface synchrone et asynchrone.</td>
+                <td class="sub-file">PhysicsQuery.h / .cpp<br>RaycastResult.h<br>OverlapResult.h</td>
+                <td><span class="prio p1">P1 IMPORTANT</span></td>
+                <td class="dur">2 jours</td>
+                <td><div class="os-tags"><span class="os-tag">JoltPhysics queries</span></div></td>
+            </tr>
+            <tr>
+                <td class="sub-id">5.5</td>
+                <td class="sub-name">Full-Body IK (Cinématique Inverse)</td>
+                <td class="sub-desc">Reconstruit le corps entier du personnage depuis uniquement 3 points de données : position de la tête (casque), position main gauche et main droite (si disponibles) — ou uniquement la tête en mode allongé. Le solveur IK FABRIK calcule les positions des épaules, coudes, torse et hanches. En mode allongé pur, les jambes sont simulées selon le vecteur de déplacement du regard. Donne l'impression que le corps virtuel "vit".</td>
+                <td class="sub-file">BodyIKSolver.h / .cpp<br>FABRIKSolver.h<br>SkeletonComponent.h</td>
+                <td><span class="prio p2">P2</span></td>
+                <td class="dur">5 jours</td>
+                <td><div class="os-tags"><span class="os-tag">FABRIK (Aristidou paper)</span><span class="os-tag">Final IK (Unity ref)</span></div></td>
+            </tr>
+            <tr>
+                <td class="sub-id">5.6</td>
+                <td class="sub-name">Navigation & Pathfinding IA</td>
+                <td class="sub-desc">Génère les NavMesh (grilles de navigation) pour que les monstres puissent naviguer dans l'environnement de manière réaliste. Intègre Recast/Detour (l'algorithme de pathfinding utilisé par Unreal Engine, open source). Les loups de cristal contournent les obstacles, Lycaon tourne en orbite à rayon fixe. Mise à jour dynamique du NavMesh quand le terrain est détruit.</td>
+                <td class="sub-file">NavMesh.h / .cpp<br>PathfindingSystem.h<br>AINavigationComponent.h</td>
+                <td><span class="prio p2">P2</span></td>
+                <td class="dur">5 jours</td>
+                <td><div class="os-tags"><span class="os-tag">Recast Navigation</span><span class="os-tag">DetourCrowd</span></div></td>
+            </tr>
+            </tbody>
+        </table>
+    </div>
+
+    <!-- MODULE 6 -->
+    <div class="section-title">
+        <span class="section-num">MODULE 06</span>
+        <h2>Audio 3D Spatialisé — HRTF & Doppler</h2>
+        <span class="phase-badge phase-3">PHASE 3 — Mois 7-8</span>
+    </div>
+    <div class="module-desc">
+        <strong>Rôle :</strong> En mode allongé sans manettes, l'ouïe REMPLACE la vision périphérique. Si Lycaon arrive par derrière, le joueur doit pouvoir le localiser uniquement par le son. Ce module implémente un audio 3D de haute fidélité : HRTF (simulation du pavillon de l'oreille pour localiser les sons en 3D), Effet Doppler (sons qui changent de fréquence quand Lycaon passe en trombe), et occlusion sonore (un monstre derrière un mur semble étouffé).
+        <br><br><strong>Dépendances :</strong> Modules 1, 5 (la physique fournit les collisions pour l'occlusion sonore).<br>
+        <strong>Débloque :</strong> Module 7 (la détection de serrage de dents peut déclencher des effets audio), Module 9 (le son réseau doit être synchronisé).
+    </div>
+    <div class="tbl-wrap">
+        <table>
+            <thead><tr><th>ID</th><th>Nom</th><th>Description détaillée</th><th>Fichiers C++</th><th>Priorité</th><th>Durée</th><th>Open Source Référence</th></tr></thead>
+            <tbody>
+            <tr>
+                <td class="sub-id">6.1</td>
+                <td class="sub-name">Init Moteur Audio</td>
+                <td class="sub-desc">Initialise FMOD Studio (solution AAA) ou, pour une approche full open source, OpenAL Soft. FMOD offre un Designer de sons (pour les sound designers de l'équipe), OpenAL offre plus de contrôle bas niveau. Ce sous-module abstrait le choix derrière une interface AudioEngine pour que le reste du code ne dépende pas du fournisseur audio.</td>
+                <td class="sub-file">AudioEngine.h / .cpp<br>FMODAudioEngine.cpp<br>OpenALEngine.cpp</td>
+                <td><span class="prio p0">P0 BLOQUANT</span></td>
+                <td class="dur">3 jours</td>
+                <td><div class="os-tags"><span class="os-tag">FMOD Studio</span><span class="os-tag">OpenAL Soft</span><span class="os-tag">SoLoud</span></div></td>
+            </tr>
+            <tr>
+                <td class="sub-id">6.2</td>
+                <td class="sub-name">Sources Audio 3D Positionnées</td>
+                <td class="sub-desc">Chaque entité sonore (pas de Lycaon, cri de monstre, crackling d'une torche) est une source audio avec une position 3D mise à jour chaque frame depuis son TransformComponent ECS. L'AudioEmitterComponent contient : SoundID, volume, range min/max, mode d'atténuation (linéaire, logarithmique). L'"listener" est la position des oreilles du joueur (position du casque VR).</td>
+                <td class="sub-file">AudioSource.h / .cpp<br>AudioEmitterComponent.h<br>AudioListenerSystem.h</td>
+                <td><span class="prio p0">P0 BLOQUANT</span></td>
+                <td class="dur">3 jours</td>
+                <td><div class="os-tags"><span class="os-tag">FMOD 3D Audio</span><span class="os-tag">OpenAL AL_POSITION</span></div></td>
+            </tr>
+            <tr>
+                <td class="sub-id">6.3</td>
+                <td class="sub-name">HRTF — Spatialisation Réaliste</td>
+                <td class="sub-desc">L'algorithme HRTF (Head-Related Transfer Function) simule comment le son est filtré par le pavillon de l'oreille humaine avant d'entrer dans le conduit auditif. Cela permet de localiser un son NON seulement gauche/droite, mais aussi haut/bas et avant/derrière — impossible avec un simple panning stéréo. Utilise des HRTF databases (MIT KEMAR ou Sadie II) convoluées en temps réel avec un convolution reverb GPU. Vital pour la localisation de Lycaon invisible.</td>
+                <td class="sub-file">HRTFProcessor.h / .cpp<br>HRTFDatabase.h<br>ConvolutionReverb.h</td>
+                <td><span class="prio p0">P0 BLOQUANT</span></td>
+                <td class="dur">5 jours</td>
+                <td><div class="os-tags"><span class="os-tag">OpenAL Soft HRTF</span><span class="os-tag">MIT KEMAR dataset</span><span class="os-tag">SADIE II</span></div></td>
+            </tr>
+            <tr>
+                <td class="sub-id">6.4</td>
+                <td class="sub-name">Effet Doppler</td>
+                <td class="sub-desc">Modifie la fréquence perçue d'un son selon la vitesse relative source/auditeur. Si Lycaon fonce vers le joueur à 60 km/h, ses grognements montent en fréquence (comme une voiture de course qui approche). Dès qu'il dépasse, les sons descendent. Calculé via la formule physique standard à chaque frame selon le vecteur de vélocité de l'entité. Rend les combats de Lycaon viscéralement réels.</td>
+                <td class="sub-file">DopplerSystem.h / .cpp</td>
+                <td><span class="prio p1">P1 IMPORTANT</span></td>
+                <td class="dur">1 jour</td>
+                <td><div class="os-tags"><span class="os-tag">FMOD Doppler</span><span class="os-tag">OpenAL AL_VELOCITY</span></div></td>
+            </tr>
+            <tr>
+                <td class="sub-id">6.5</td>
+                <td class="sub-name">Occlusion Sonore</td>
+                <td class="sub-desc">Quand un monstre se cache derrière un mur, son son doit sembler étouffé et lointain. Ce système utilise le PhysicsQuery (Module 5) pour lancer 3 à 5 rayons entre la source sonore et l'oreille du joueur. Si les rayons traversent des matériaux (pierre, eau, métal), un filtre passe-bas est appliqué au son en temps réel (coupe les hautes fréquences = son sourd). La quantité de filtrage dépend de l'épaisseur du matériau traversé.</td>
+                <td class="sub-file">AudioOcclusion.h / .cpp<br>MaterialAcoustics.h</td>
+                <td><span class="prio p2">P2</span></td>
+                <td class="dur">3 jours</td>
+                <td><div class="os-tags"><span class="os-tag">Steam Audio</span><span class="os-tag">Resonance Audio (Google)</span></div></td>
+            </tr>
+            <tr>
+                <td class="sub-id">6.6</td>
+                <td class="sub-name">Composant ECS AudioEmitterComponent</td>
+                <td class="sub-desc">Le pont entre les entités ECS et le moteur audio. Toute entité (monstre, torche, porte, joueur) peut avoir ce composant pour émettre du son dans l'espace. Contient : l'ID du son, l'état de lecture (playing/paused/stopped), le volume, le rayon d'activation (au-delà de 200m, la source est automatiquement désactivée pour économiser le CPU). Géré par l'AudioSystem chaque frame.</td>
+                <td class="sub-file">AudioEmitterComponent.h<br>AudioSystem.h / .cpp</td>
+                <td><span class="prio p1">P1 IMPORTANT</span></td>
+                <td class="dur">1 jour</td>
+                <td><div class="os-tags"><span class="os-tag">EnTT components</span></div></td>
+            </tr>
+            </tbody>
+        </table>
+    </div>
+
+    <!-- MODULE 7 -->
+    <div class="section-title">
+        <span class="section-num">MODULE 07</span>
+        <h2>Neural Input — BCI / EMG / OpenBCI</h2>
+        <span class="phase-badge phase-3">PHASE 3 — Mois 7-9</span>
+    </div>
+    <div class="module-desc">
+        <strong>Rôle :</strong> Le module le plus avant-gardiste et différenciateur de Synapse Engine. Connecte les signaux biologiques bruts du joueur (tension musculaire de la mâchoire, ondes cérébrales de concentration) à la logique de jeu. C'est ce qui transforme l'expérience de "regarder un jeu en VR" en "être dans le jeu". La détection du serrage de dents remplace le bouton d'action. La concentration mentale alimente la puissance des sorts.
+        <br><br><strong>Dépendances :</strong> Modules 1 (ECS, Event Bus), 4 (synchronisé avec le regard).<br>
+        <strong>Débloque :</strong> Module 8 (la voix + la concentration = combo pour sorts puissants).
+    </div>
+    <div class="tbl-wrap">
+        <table>
+            <thead><tr><th>ID</th><th>Nom</th><th>Description détaillée</th><th>Fichiers C++</th><th>Priorité</th><th>Durée</th><th>Open Source Référence</th></tr></thead>
+            <tbody>
+            <tr>
+                <td class="sub-id">7.1</td>
+                <td class="sub-name">Connexion LSL (Lab Streaming Layer)</td>
+                <td class="sub-desc">LSL (Lab Streaming Layer) est le protocole open source standard des laboratoires de neurosciences pour transmettre des données de capteurs en temps réel avec synchronisation temporelle précise. OpenBCI envoie ses données EEG/EMG sur un flux LSL via USB. Ce sous-module ouvre un inlet LSL, découvre le flux par son nom/type, et le lit dans un thread séparé à 500Hz (le double de la fréquence du casque VR).</td>
+                <td class="sub-file">LSLReceiver.h / .cpp<br>LSLStreamInfo.h</td>
+                <td><span class="prio p0">P0 BLOQUANT</span></td>
+                <td class="dur">3 jours</td>
+                <td><div class="os-tags"><span class="os-tag">liblsl (GitHub)</span><span class="os-tag">OpenBCI LSL docs</span></div></td>
+            </tr>
+            <tr>
+                <td class="sub-id">7.2</td>
+                <td class="sub-name">Parser EEG Brut (Cyton Board)</td>
+                <td class="sub-desc">Convertit les samples bruts de la carte OpenBCI Cyton (en microvolts) en données utilisables. Applique un filtre Notch (60Hz/50Hz selon le pays) pour supprimer l'interférence du réseau électrique. Sépare les 8 canaux EEG en zones cérébrales (frontal = concentration, occipital = vision, temporal = émotions). Chaque sample est horodaté en nanosecondes pour synchronisation avec les frames VR.</td>
+                <td class="sub-file">EEGParser.h / .cpp<br>NotchFilter.h<br>EEGChannelMap.h</td>
+                <td><span class="prio p0">P0 BLOQUANT</span></td>
+                <td class="dur">3 jours</td>
+                <td><div class="os-tags"><span class="os-tag">OpenBCI SDK</span><span class="os-tag">BrainFlow</span></div></td>
+            </tr>
+            <tr>
+                <td class="sub-id">7.3</td>
+                <td class="sub-name">Détecteur Serrage de Dents (EMG Jaw)</td>
+                <td class="sub-desc">Les muscles temporaux (mâchoire) génèrent des signaux EMG très distincts et reconnaissables. Les électrodes placées sur les tempes dans le casque captent ces micro-contractions. Un algorithme de seuillage adaptatif (qui s'ajuste au joueur spécifique) détecte : serrage léger (bouton "Valider"), serrage fort et bref (bouton "Sprint/Esquive"), double serrage (bouton "Inventaire"). Latence de détection cible : <5ms.</td>
+                <td class="sub-file">JawClenchDetector.h / .cpp<br>EMGThresholder.h<br>AdaptiveBaseline.h</td>
+                <td><span class="prio p0">P0 BLOQUANT</span></td>
+                <td class="dur">4 jours</td>
+                <td><div class="os-tags"><span class="os-tag">BrainFlow EMG</span><span class="os-tag">OpenBCI EMG tutorial</span></div></td>
+            </tr>
+            <tr>
+                <td class="sub-id">7.4</td>
+                <td class="sub-name">Analyseur Focus Mental (Ondes α/β)</td>
+                <td class="sub-desc">La concentration intense augmente les ondes Bêta (13-30Hz) dans le lobe frontal. La relaxation augmente les ondes Alpha (8-12Hz). Une FFT (Fast Fourier Transform) glissante sur une fenêtre de 256ms calcule la puissance spectrale de chaque bande. Si Puissance_Beta > seuil_dynamique pendant 300ms : le MentalFocusLevel monte vers 1.0. Si le joueur panique (Bêta incontrôlé) : le niveau chute. Ce float (0.0 à 1.0) alimente directement la puissance des sorts dans l'ECS.</td>
+                <td class="sub-file">MentalFocusAnalyzer.h / .cpp<br>FFTProcessor.h<br>SpectralBandAnalyzer.h</td>
+                <td><span class="prio p1">P1 IMPORTANT</span></td>
+                <td class="dur">5 jours</td>
+                <td><div class="os-tags"><span class="os-tag">BrainFlow focus metric</span><span class="os-tag">pffft (FFT lib)</span></div></td>
+            </tr>
+            <tr>
+                <td class="sub-id">7.5</td>
+                <td class="sub-name">Détecteur Clignement Volontaire</td>
+                <td class="sub-desc">Distingue un clignement naturel involontaire (toutes les 4-6 secondes, durée ~150ms) d'un clignement volontaire intentionnel (durée ~300-400ms, amplitude plus forte dans les canaux frontaux EEG). Utilise un SVM (Support Vector Machine) léger pré-entraîné sur les patterns EOG (ElectroOculoGraphie). Le clignement volontaire = action "Lancer Sort" ou "Confirmer". Faux-positifs cibles : <1%.</td>
+                <td class="sub-file">BlinkDetector.h / .cpp<br>EOGClassifier.h<br>models/blink_svm.bin</td>
+                <td><span class="prio p1">P1 IMPORTANT</span></td>
+                <td class="dur">4 jours</td>
+                <td><div class="os-tags"><span class="os-tag">BrainFlow blink</span><span class="os-tag">OpenBCI EOG filter</span></div></td>
+            </tr>
+            <tr>
+                <td class="sub-id">7.6</td>
+                <td class="sub-name">Filtre Anti-bruit Neuronal</td>
+                <td class="sub-desc">Les signaux EEG bruts sont extrêmement bruités (artefacts musculaires, électriques, de mouvement). Applique en cascade : filtre passe-bande Butterworth (0.5-50Hz), filtre Common Average Reference (CAR) pour supprimer le bruit commun à tous les électrodes, et un algorithme de rejet d'artefacts ICA (Independent Component Analysis) simplifié pour supprimer les artefacts de battement oculaire. Sans ce module, tous les signaux BCI sont inutilisables.</td>
+                <td class="sub-file">NeuralFilter.h / .cpp<br>ButterworthFilter.h<br>CARFilter.h<br>ArtifactRejector.h</td>
+                <td><span class="prio p0">P0 BLOQUANT</span></td>
+                <td class="dur">4 jours</td>
+                <td><div class="os-tags"><span class="os-tag">BrainFlow filters</span><span class="os-tag">DSP Filters (vinniefalco)</span></div></td>
+            </tr>
+            <tr>
+                <td class="sub-id">7.7</td>
+                <td class="sub-name">Composant ECS NeuralInputComponent</td>
+                <td class="sub-desc">Centralise toutes les entrées biologiques sous forme d'un composant ECS simple lu par tous les systèmes de jeu. Contient : niveauFocus (float 0-1), serrageAMachoire (enum: NONE/LIGHT/STRONG/DOUBLE), clignementVolontaire (bool), niveauStress (float 0-1, calculé depuis rythme cardiaque si capteur disponible). Mis à jour par le thread BCI à 500Hz et lu par les systèmes ECS à 90Hz via un double buffer.</td>
+                <td class="sub-file">NeuralInputComponent.h<br>BioInputBridge.h</td>
+                <td><span class="prio p0">P0 BLOQUANT</span></td>
+                <td class="dur">1 jour</td>
+                <td><div class="os-tags"><span class="os-tag">EnTT</span></div></td>
+            </tr>
+            <tr>
+                <td class="sub-id">7.8</td>
+                <td class="sub-name">Bio-to-Action Mapping System</td>
+                <td class="sub-desc">Le traducteur final : convertit les valeurs biologiques brutes en actions de jeu concrètes. Tableau de mapping configurable par le joueur (ex: serrage fort + regard sur ennemi = coup spécial). Intègre une machine d'état pour les combos (serrage léger PUIS clignement en 500ms = activation bouclier). Émet des GameActionEvents sur l'Event Bus qui sont interceptés par les systèmes de combat, navigation et interface.</td>
+                <td class="sub-file">BioInputMappingSystem.h / .cpp<br>ActionMapping.h<br>BioComboDetector.h</td>
+                <td><span class="prio p0">P0 BLOQUANT</span></td>
+                <td class="dur">4 jours</td>
+                <td><div class="os-tags"><span class="os-tag">Input abstraction patterns</span></div></td>
+            </tr>
+            </tbody>
+        </table>
+    </div>
+
+    <!-- MODULE 8 -->
+    <div class="section-title">
+        <span class="section-num">MODULE 08</span>
+        <h2>AI Vocale — Whisper.cpp + Intent Parser</h2>
+        <span class="phase-badge phase-3">PHASE 3 — Mois 8-9</span>
+    </div>
+    <div class="module-desc">
+        <strong>Rôle :</strong> Permet au joueur de parler à voix basse depuis son lit et que le moteur comprenne ses intentions. "Boule de feu" lance un sort. "Inventaire" ouvre le menu. "Je cherche le donjon" contextualise la conversation avec un PNJ. Whisper.cpp est la version C++ ultra-optimisée du modèle de reconnaissance vocale de OpenAI, tournant entièrement en local (sans internet) sur le GPU ou CPU.
+        <br><br><strong>Dépendances :</strong> Modules 1, 4 (la cible regardée donne le contexte vocal), 7 (la concentration mentale amplifie la commande vocale).<br>
+        <strong>Débloque :</strong> Contenu Aetheria-Frontier (dialogues PNJ, sorts vocaux, lore vocal).
+    </div>
+    <div class="tbl-wrap">
+        <table>
+            <thead><tr><th>ID</th><th>Nom</th><th>Description détaillée</th><th>Fichiers C++</th><th>Priorité</th><th>Durée</th><th>Open Source Référence</th></tr></thead>
+            <tbody>
+            <tr>
+                <td class="sub-id">8.1</td>
+                <td class="sub-name">Intégration Whisper.cpp</td>
+                <td class="sub-desc">Charge le modèle Whisper (taille "small" ou "base" selon la VRAM disponible) en mémoire GPU via CUDA/Vulkan Compute. Le modèle est initialisé une fois au lancement. La transcription est faite par segment audio de 2-3 secondes pour équilibrer latence et précision. En mode "commande courte" (sorts), on utilise le modèle tiny (latence ~150ms). En mode "dialogue PNJ", on utilise le modèle small (meilleure précision).</td>
+                <td class="sub-file">VoiceRecognizer.h / .cpp<br>WhisperContext.h<br>ModelLoader.h</td>
+                <td><span class="prio p0">P0 BLOQUANT</span></td>
+                <td class="dur">4 jours</td>
+                <td><div class="os-tags"><span class="os-tag">whisper.cpp (ggerganov)</span><span class="os-tag">GGML</span></div></td>
+            </tr>
+            <tr>
+                <td class="sub-id">8.2</td>
+                <td class="sub-name">Capture Micro Temps Réel</td>
+                <td class="sub-desc">Capture le flux audio du microphone du casque VR en temps réel via PortAudio ou SDL_audio. Applique un VAD (Voice Activity Detection) pour ne transcrire que quand le joueur parle (évite de gaspiller le GPU sur le silence). Applique un filtre de réduction de bruit de fond (ventilateurs PC, bruit de la pièce) pour améliorer la précision de Whisper en conditions réelles d'utilisation allongée.</td>
+                <td class="sub-file">MicCapture.h / .cpp<br>VADDetector.h<br>NoiseSuppressor.h</td>
+                <td><span class="prio p0">P0 BLOQUANT</span></td>
+                <td class="dur">3 jours</td>
+                <td><div class="os-tags"><span class="os-tag">PortAudio</span><span class="os-tag">RNNoise (noise suppress)</span></div></td>
+            </tr>
+            <tr>
+                <td class="sub-id">8.3</td>
+                <td class="sub-name">Pipeline STT Asynchrone</td>
+                <td class="sub-desc">Le pipeline Speech-to-Text tourne entièrement dans un thread séparé pour ne jamais bloquer la boucle de rendu à 90Hz. Architecture : MicCapture → CircularAudioBuffer → WhisperWorkerThread → TranscriptionQueue. Le thread principal consomme les transcriptions disponibles dans la queue à chaque frame. Garantit que la transcription d'un sort en 150ms n'impacte pas le framerate VR.</td>
+                <td class="sub-file">STTPipeline.h / .cpp<br>AudioCircularBuffer.h<br>TranscriptionQueue.h</td>
+                <td><span class="prio p0">P0 BLOQUANT</span></td>
+                <td class="dur">3 jours</td>
+                <td><div class="os-tags"><span class="os-tag">whisper.cpp examples</span></div></td>
+            </tr>
+            <tr>
+                <td class="sub-id">8.4</td>
+                <td class="sub-name">Intent Parser — Texte vers Action</td>
+                <td class="sub-desc">Convertit le texte brut transcrit ("je lance une boule de feu sur lui") en intentions structurées (ACTION: CAST_SPELL, SPELL_TYPE: FIREBALL, TARGET: currently_gazed_entity). Utilise un matching par règles + fuzzy matching (tolère les fautes de prononciation) pour les commandes courtes connues. Pour les dialogues complexes, envoie le texte au LLM serveur (Module 9) pour une compréhension avancée. Inclut un fichier JSON de mapping commandes→sorts configurable par le game designer.</td>
+                <td class="sub-file">IntentParser.h / .cpp<br>CommandMatcher.h<br>data/voice_commands.json</td>
+                <td><span class="prio p1">P1 IMPORTANT</span></td>
+                <td class="dur">4 jours</td>
+                <td><div class="os-tags"><span class="os-tag">RapidFuzz (fuzzy matching)</span><span class="os-tag">nlohmann/json</span></div></td>
+            </tr>
+            <tr>
+                <td class="sub-id">8.5</td>
+                <td class="sub-name">VoiceCommandSystem ECS</td>
+                <td class="sub-desc">Le système ECS qui applique les intentions vocales analysées. Vérifie les conditions de déclenchement (le joueur a-t-il assez de mana ? Est-il en état de parler ? La cible est-elle valide ?). Émet les GameActionEvents correspondants (CastSpellEvent, OpenInventoryEvent, TalkToNPCEvent). Intègre un système anti-spam (cooldown de 500ms entre deux commandes vocales pour éviter les déclenchements accidentels).</td>
+                <td class="sub-file">VoiceCommandSystem.h / .cpp<br>VoiceCommandComponent.h</td>
+                <td><span class="prio p1">P1 IMPORTANT</span></td>
+                <td class="dur">2 jours</td>
+                <td><div class="os-tags"><span class="os-tag">EnTT systems</span></div></td>
+            </tr>
+            </tbody>
+        </table>
+    </div>
+
+    <!-- MODULE 9 -->
+    <div class="section-title">
+        <span class="section-num">MODULE 09</span>
+        <h2>Network — Architecture MMO Multi-serveur</h2>
+        <span class="phase-badge phase-4">PHASE 4 — Mois 10-14</span>
+    </div>
+    <div class="module-desc">
+        <strong>Rôle :</strong> Transforme le jeu solo en VRMMO massif. Le serveur est autoritaire : il calcule la physique et l'IA des boss, le client (casque) envoie uniquement les intentions de regard et les actions, et reçoit l'état du monde. La prédiction client + réconciliation garantit une expérience fluide même avec 100ms de ping. Le Server Meshing distribue les zones de jeu sur plusieurs serveurs pour supporter des milliers de joueurs simultanés.
+        <br><br><strong>Dépendances :</strong> Modules 1 (ECS complet), 5 (physique serveur-side).<br>
+        <strong>Débloque :</strong> Contenu Aetheria-Frontier multijoueur (raids Lycaon, guildes, commerce).
+    </div>
+    <div class="tbl-wrap">
+        <table>
+            <thead><tr><th>ID</th><th>Nom</th><th>Description détaillée</th><th>Fichiers C++</th><th>Priorité</th><th>Durée</th><th>Open Source Référence</th></tr></thead>
+            <tbody>
+            <tr>
+                <td class="sub-id">9.1</td>
+                <td class="sub-name">Couche Transport UDP</td>
+                <td class="sub-desc">Le jeu utilise UDP (pas TCP) car UDP n'attend pas l'accusé de réception — un paquet perdu est ignoré (une vieille position de monstre n'a pas besoin d'être retransmise, la prochaine frame apportera la nouvelle). Implémente au-dessus d'UDP : reliability sélective (certains packets critiques comme les "vous êtes mort" sont ré-envoyés), ordering (numérotation de séquence), et congestion control. ENet ou GameNetworkingSockets (Valve) sont des références solides.</td>
+                <td class="sub-file">NetworkSocket.h / .cpp<br>PacketProtocol.h<br>ReliableUDP.h</td>
+                <td><span class="prio p0">P0 BLOQUANT</span></td>
+                <td class="dur">5 jours</td>
+                <td><div class="os-tags"><span class="os-tag">ENet</span><span class="os-tag">GameNetworkingSockets (Valve)</span><span class="os-tag">yojimbo</span></div></td>
+            </tr>
+            <tr>
+                <td class="sub-id">9.2</td>
+                <td class="sub-name">Sérialisation Binaire</td>
+                <td class="sub-desc">Encode les états du jeu (positions, HP, sorts actifs) en paquets binaires compacts pour minimiser la bande passante. Un joueur qui bouge envoie 20 bytes par frame maximum (pas 1ko de JSON). Utilise un schéma de compression delta (n'envoie que ce qui a changé depuis le dernier paquet) et bit packing (compresser un booléen sur 1 bit au lieu de 8). FlatBuffers ou un sérialiseur custom sont les options.</td>
+                <td class="sub-file">Serializer.h / .cpp<br>BitStream.h<br>DeltaEncoder.h</td>
+                <td><span class="prio p0">P0 BLOQUANT</span></td>
+                <td class="dur">4 jours</td>
+                <td><div class="os-tags"><span class="os-tag">FlatBuffers</span><span class="os-tag">zpp_bits</span><span class="os-tag">netcode.io</span></div></td>
+            </tr>
+            <tr>
+                <td class="sub-id">9.3</td>
+                <td class="sub-name">Prédiction Client</td>
+                <td class="sub-desc">Quand le joueur "avance" (regard + serrage), son client simule immédiatement le mouvement localement SANS attendre la confirmation du serveur (~50-150ms de latence). Cela rend le jeu réactif. Chaque input est numéroté et sauvegardé dans une queue locale. Quand la confirmation serveur arrive, le client compare sa prédiction avec l'état serveur autoritaire.</td>
+                <td class="sub-file">ClientPrediction.h / .cpp<br>InputQueue.h<br>PredictedState.h</td>
+                <td><span class="prio p1">P1 IMPORTANT</span></td>
+                <td class="dur">5 jours</td>
+                <td><div class="os-tags"><span class="os-tag">Valve networking articles</span><span class="os-tag">Fast-Paced Multiplayer (Gabriel Gambetta)</span></div></td>
+            </tr>
+            <tr>
+                <td class="sub-id">9.4</td>
+                <td class="sub-name">Réconciliation Serveur (Rollback)</td>
+                <td class="sub-desc">Quand le serveur corrige la position du client (car la prédiction était fausse), le moteur applique une correction douce (smooth correction) : pas de téléportation brutale, mais une interpolation sur 3-5 frames vers la vraie position. Si la différence est trop grande (>1m), un rollback complet remet le client à la position serveur. Évite le rubber-banding visible dans les MMO de mauvaise qualité.</td>
+                <td class="sub-file">ServerReconciliation.h / .cpp<br>StateSnapshot.h<br>SnapInterpolation.h</td>
+                <td><span class="prio p1">P1 IMPORTANT</span></td>
+                <td class="dur">4 jours</td>
+                <td><div class="os-tags"><span class="os-tag">Fast-Paced Multiplayer</span><span class="os-tag">GGPO (rollback netcode)</span></div></td>
+            </tr>
+            <tr>
+                <td class="sub-id">9.5</td>
+                <td class="sub-name">Réplication d'État ECS</td>
+                <td class="sub-desc">Le serveur doit informer chaque client des changements d'état des entités à portée de vue. Ce système marque les composants ECS comme "dirty" quand ils changent (ex: HP de Lycaon descend), et envoie uniquement les composants dirty aux clients concernés dans le prochain paquet réseau. Utilise un Interest Management basé sur la position (un joueur ne reçoit pas les updates d'entités à 5km de lui).</td>
+                <td class="sub-file">ECSReplication.h / .cpp<br>DirtyFlagSystem.h<br>InterestManager.h</td>
+                <td><span class="prio p1">P1 IMPORTANT</span></td>
+                <td class="dur">6 jours</td>
+                <td><div class="os-tags"><span class="os-tag">Mirror Networking (ref arch)</span><span class="os-tag">SpatialOS concepts</span></div></td>
+            </tr>
+            <tr>
+                <td class="sub-id">9.6</td>
+                <td class="sub-name">Server Meshing</td>
+                <td class="sub-desc">Divise le monde persistant d'Aetheria en zones gérées par des serveurs différents. Quand un joueur traverse la frontière entre deux zones, son état est transféré seamlessly d'un serveur à l'autre (handoff protocol). Chaque serveur de zone connaît les entités "fantômes" des zones adjacentes pour les interactions aux frontières (Lycaon peut traverser une frontière de zone). Architecture inspirée de Star Citizen.</td>
+                <td class="sub-file">ServerMesh.h / .cpp<br>ZoneServer.h<br>PlayerHandoff.h</td>
+                <td><span class="prio p2">P2</span></td>
+                <td class="dur">10 jours</td>
+                <td><div class="os-tags"><span class="os-tag">SpatialOS (architecture ref)</span><span class="os-tag">Star Citizen Server Meshing articles</span></div></td>
+            </tr>
+            <tr>
+                <td class="sub-id">9.7</td>
+                <td class="sub-name">IA Serveur — Boss State Machine</td>
+                <td class="sub-desc">L'IA de Lycaon, Aegis-Null et tous les boss est calculée côté serveur (anti-triche). Chaque boss a une State Machine Hiérarchique (HSM) : états de haut niveau (PATROL, COMBAT, FLEE) décomposés en sous-états (COMBAT → RUSH, ORBIT, POUNCE). Les transitions d'état sont dictées par les HP du boss, la distance des joueurs, leur niveau de stress BCI (si le serveur reçoit un stress élevé, Lycaon devient plus agressif), et les actions des joueurs.</td>
+                <td class="sub-file">ServerAISystem.h / .cpp<br>BossStateMachine.h<br>AI/LycaonAI.h<br>AI/AegisNullAI.h</td>
+                <td><span class="prio p1">P1 IMPORTANT</span></td>
+                <td class="dur">8 jours</td>
+                <td><div class="os-tags"><span class="os-tag">Behavior Trees (BehaviorTree.CPP)</span><span class="os-tag">BFBS patterns</span></div></td>
+            </tr>
+            </tbody>
+        </table>
+    </div>
+
+    <!-- MODULE 10 -->
+    <div class="section-title">
+        <span class="section-num">MODULE 10</span>
+        <h2>Editor — Outils & ImGui Debug Interface</h2>
+        <span class="phase-badge phase-5">PHASE 5 — Mois 14-16</span>
+    </div>
+    <div class="module-desc">
+        <strong>Rôle :</strong> L'éditeur est l'outil de travail quotidien de toute l'équipe. Sans lui, débugger un problème de gaze raycast ou de réseau sur un casque VR est un cauchemar. ImGui permet de créer une interface de debug intégrée directement dans le moteur, visible en temps réel dans la fenêtre de preview PC. L'inspecteur d'entités permet de modifier les stats de Lycaon à la volée, sans recompiler.
+        <br><br><strong>Dépendances :</strong> Modules 1 (ECS), 3 (le renderer doit afficher ImGui), 4 (visualiser le gaze).<br>
+        <strong>Débloque :</strong> Productivité de l'équipe sur Aetheria-Frontier.
+    </div>
+    <div class="tbl-wrap">
+        <table>
+            <thead><tr><th>ID</th><th>Nom</th><th>Description détaillée</th><th>Fichiers C++</th><th>Priorité</th><th>Durée</th><th>Open Source Référence</th></tr></thead>
+            <tbody>
+            <tr>
+                <td class="sub-id">10.1</td>
+                <td class="sub-name">Layer ImGui dans Vulkan</td>
+                <td class="sub-desc">Intègre Dear ImGui dans le pipeline Vulkan du moteur. ImGui utilise son propre Render Pass qui s'exécute après le rendu de la scène 3D (overlay). Gère le backend Vulkan (vertex/index buffers ImGui, pipeline de rendu dédié) et le backend GLFW (capture les événements souris/clavier pour naviguer dans les panels). Hot-reload : l'éditeur se reconstruit automatiquement quand un fichier de config change.</td>
+                <td class="sub-file">EditorLayer.h / .cpp<br>ImGuiVulkanBackend.h<br>ImGuiGLFWBackend.h</td>
+                <td><span class="prio p1">P1 IMPORTANT</span></td>
+                <td class="dur">4 jours</td>
+                <td><div class="os-tags"><span class="os-tag">Dear ImGui (ocornut)</span><span class="os-tag">imgui-node-editor</span></div></td>
+            </tr>
+            <tr>
+                <td class="sub-id">10.2</td>
+                <td class="sub-name">Inspecteur d'Entités ECS</td>
+                <td class="sub-desc">Panel ImGui qui liste toutes les entités ECS actives dans la scène courante. Pour chaque entité sélectionnée, affiche tous ses composants (Transform, Physics, NeuralInput, etc.) avec leurs valeurs en temps réel. Permet de modifier une valeur directement (ex: changer les HP de Lycaon à 1 pour tester le drop). Colore en rouge les entités dont les composants sont "dirty" (modifiés ce frame).</td>
+                <td class="sub-file">EntityInspector.h / .cpp<br>ComponentRenderer.h</td>
+                <td><span class="prio p1">P1 IMPORTANT</span></td>
+                <td class="dur">4 jours</td>
+                <td><div class="os-tags"><span class="os-tag">EnTT ImGui (skypjack)</span><span class="os-tag">ImGuiColorTextEdit</span></div></td>
+            </tr>
+            <tr>
+                <td class="sub-id">10.3</td>
+                <td class="sub-name">Overlay Debug Gaze Raycast</td>
+                <td class="sub-desc">Visualiseur 3D du vecteur de regard en temps réel. Dessine une ligne rouge depuis les yeux du joueur jusqu'à la surface touchée par le GazeRaycast. Affiche un cercle vert sur l'entité actuellement ciblée avec son ECS ID et sa distance. Affiche un histogramme du continuousFocusTime (temps de focus). Vital pour debugger les bugs de gameplay où le joueur fixe le mauvais ennemi.</td>
+                <td class="sub-file">GazeDebugOverlay.h / .cpp<br>DebugRenderer.h</td>
+                <td><span class="prio p2">P2</span></td>
+                <td class="dur">2 jours</td>
+                <td><div class="os-tags"><span class="os-tag">ImGui DrawList</span></div></td>
+            </tr>
+            <tr>
+                <td class="sub-id">10.4</td>
+                <td class="sub-name">Console de Logs Temps Réel</td>
+                <td class="sub-desc">Panel ImGui qui affiche en temps réel les logs filtrés par niveau (DEBUG/INFO/WARN/ERROR). Permet de chercher dans les logs ("lycaon"), de filtrer par module (Network, Physics, Neural). Colore les logs selon leur niveau (rouge=error, jaune=warn, blanc=info). Sauvegarde les logs dans un fichier rotatif /logs/engine_YYYYMMDD.log. Indispensable pour debugger les problèmes réseau sans ouvrir le casque.</td>
+                <td class="sub-file">LogConsole.h / .cpp<br>LogFilter.h</td>
+                <td><span class="prio p1">P1 IMPORTANT</span></td>
+                <td class="dur">2 jours</td>
+                <td><div class="os-tags"><span class="os-tag">spdlog</span><span class="os-tag">ImGui Log widget</span></div></td>
+            </tr>
+            <tr>
+                <td class="sub-id">10.5</td>
+                <td class="sub-name">Sérialisation de Scène (JSON)</td>
+                <td class="sub-desc">Sauvegarde et charge l'état complet d'une scène (toutes les entités et leurs composants) en fichier JSON. Permet aux game designers de créer des niveaux dans l'éditeur et de les charger en production. Utilise un système de réflexion C++ (statique, via macros) pour sérialiser automatiquement tous les composants ECS sans code manuel. Format : un fichier .scene JSON par zone d'Aetheria (zone_neozenith.scene, zone_forge_kael.scene).</td>
+                <td class="sub-file">SceneSerializer.h / .cpp<br>ComponentSerializer.h<br>Reflection.h<br>scenes/zone_start.scene</td>
+                <td><span class="prio p2">P2</span></td>
+                <td class="dur">4 jours</td>
+                <td><div class="os-tags"><span class="os-tag">nlohmann/json</span><span class="os-tag">cereal</span><span class="os-tag">reflect-cpp</span></div></td>
+            </tr>
+            </tbody>
+        </table>
+    </div>
+
+    <!-- OPEN SOURCE REFERENCE TABLE -->
+    <div class="ref-section">
+        <div class="section-title" style="margin-top:0">
+            <span class="section-num">ANNEXE A</span>
+            <h2>Projets Open Source — Bibliothèque de Référence Complète</h2>
+        </div>
+        <div class="module-desc">
+            Ces projets sont à <strong>étudier, intégrer ou s'inspirer directement</strong>. Ils ne remplacent pas votre moteur — ils en sont les composants. Chaque bibliothèque a été choisie pour sa compatibilité avec C++20/23, Vulkan, et l'architecture ECS de Synapse Engine.
+        </div>
+        <div class="tbl-wrap">
+            <table>
+                <thead>
+                <tr>
+                    <th>Bibliothèque / Projet</th>
+                    <th>Catégorie</th>
+                    <th>Module Synapse Concerné</th>
+                    <th>Ce qu'elle apporte concrètement</th>
+                    <th>Licence</th>
+                    <th>Lien GitHub</th>
+                </tr>
+                </thead>
+                <tbody>
+                <tr>
+                    <td class="sub-name">EnTT</td>
+                    <td><span class="os-tag">ECS</span></td>
+                    <td class="sub-id">MOD 01</td>
+                    <td class="sub-desc">Le registre ECS le plus rapide en C++. Header-only, zéro dépendance. Utilisé par Minecraft Bedrock et Open 3D Engine. Fournit Registry, Views, Groups, Signals et Scheduler. Ne pas le coder soi-même — des années de benchmarks le valident.</td>
+                    <td><span class="status s-core">MIT</span></td>
+                    <td class="sub-file">skypjack/entt</td>
+                </tr>
+                <tr>
+                    <td class="sub-name">spdlog</td>
+                    <td><span class="os-tag">Logging</span></td>
+                    <td class="sub-id">MOD 01</td>
+                    <td class="sub-desc">Logger C++ ultra-rapide (async, thread-safe, sinks multiples). Header-only possible. Formattage avec fmt. Rotation automatique des fichiers logs. Référence absolue de l'industrie C++.</td>
+                    <td><span class="status s-core">MIT</span></td>
+                    <td class="sub-file">gabime/spdlog</td>
+                </tr>
+                <tr>
+                    <td class="sub-name">GLM</td>
+                    <td><span class="os-tag">Maths</span></td>
+                    <td class="sub-id">MOD 01</td>
+                    <td class="sub-desc">Bibliothèque mathématique basée sur les specs GLSL. Vecteurs, matrices, quaternions, fonctions de projection. Optimisée SIMD (SSE2/AVX). Standard de facto pour les moteurs Vulkan/OpenGL en C++.</td>
+                    <td><span class="status s-core">MIT</span></td>
+                    <td class="sub-file">g-truc/glm</td>
+                </tr>
+                <tr>
+                    <td class="sub-name">GLFW</td>
+                    <td><span class="os-tag">Windowing</span></td>
+                    <td class="sub-id">MOD 02</td>
+                    <td class="sub-desc">Création de fenêtres cross-platform, gestion des inputs, et création de surfaces Vulkan. Léger (pas de dépendances inutiles), maintenu activement. Standard pour les prototypes et moteurs Vulkan.</td>
+                    <td><span class="status s-core">zlib</span></td>
+                    <td class="sub-file">glfw/glfw</td>
+                </tr>
+                <tr>
+                    <td class="sub-name">Tracy Profiler</td>
+                    <td><span class="os-tag">Profiling</span></td>
+                    <td class="sub-id">MOD 02</td>
+                    <td class="sub-desc">Profiler temps réel de classe mondiale. Visualise le flamegraph de CHAQUE frame Vulkan, chaque allocation mémoire, chaque context switch thread. Indispensable pour identifier pourquoi une frame dépasse 11ms en VR.</td>
+                    <td><span class="status s-core">MIT</span></td>
+                    <td class="sub-file">wolfpld/tracy</td>
+                </tr>
+                <tr>
+                    <td class="sub-name">Vulkan Memory Allocator</td>
+                    <td><span class="os-tag">GPU Memory</span></td>
+                    <td class="sub-id">MOD 03</td>
+                    <td class="sub-desc">Gestion automatique des allocations GPU Vulkan par AMD. Implémente tous les patterns d'allocation optimisés (staging, GPU-only, CPU-visible). Évite 2-3 mois de code bas niveau dangereux. Utilisé par id Software, Epic Games, et des centaines de studios.</td>
+                    <td><span class="status s-core">MIT</span></td>
+                    <td class="sub-file">GPUOpen-LibrariesAndSDKs/VulkanMemoryAllocator</td>
+                </tr>
+                <tr>
+                    <td class="sub-name">vk-bootstrap</td>
+                    <td><span class="os-tag">Vulkan Init</span></td>
+                    <td class="sub-id">MOD 03</td>
+                    <td class="sub-desc">Simplifie radicalement l'initialisation Vulkan (Instance, Device, Swapchain) qui prend normalement 500-800 lignes de code boilerplate. Permet de démarrer avec un contexte Vulkan fonctionnel en 50 lignes. À utiliser pour le sprint initial, puis étendre si nécessaire.</td>
+                    <td><span class="status s-core">MIT</span></td>
+                    <td class="sub-file">charles-lunarg/vk-bootstrap</td>
+                </tr>
+                <tr>
+                    <td class="sub-name">fastgltf</td>
+                    <td><span class="os-tag">Asset Loading</span></td>
+                    <td class="sub-id">MOD 03</td>
+                    <td class="sub-desc">Parser glTF 2.0 le plus rapide disponible en C++. Charge les scènes 3D complexes (modèle de Lycaon avec animations) de manière asynchrone. Supporte les extensions glTF modernes (KHR_materials_variants pour les armes polymorphiques). Zéro copie mémoire sur les buffers binaires.</td>
+                    <td><span class="status s-core">MIT</span></td>
+                    <td class="sub-file">spnda/fastgltf</td>
+                </tr>
+                <tr>
+                    <td class="sub-name">OpenXR SDK (Khronos)</td>
+                    <td><span class="os-tag">VR Standard</span></td>
+                    <td class="sub-id">MOD 04</td>
+                    <td class="sub-desc">Le SDK officiel OpenXR de Khronos. Headers C++, loaders, layers de validation. Inclut les exemples hello_xr (référence absolue pour démarrer avec OpenXR + Vulkan). Obligatoire. Aucune alternative viable pour la compatibilité multi-casques.</td>
+                    <td><span class="status s-core">Apache 2.0</span></td>
+                    <td class="sub-file">KhronosGroup/OpenXR-SDK</td>
+                </tr>
+                <tr>
+                    <td class="sub-name">Jolt Physics</td>
+                    <td><span class="os-tag">Physics</span></td>
+                    <td class="sub-id">MOD 05</td>
+                    <td class="sub-desc">Moteur physique multi-threadé de nouvelle génération. Utilisé par Guerrilla Games (Horizon: Forbidden West). Excellente documentation, nombreux exemples C++. Supporte CCD, ragdolls, véhicules, softbodies. Bien plus performant que Bullet et PhysX open source sur les architectures multi-cœurs modernes.</td>
+                    <td><span class="status s-core">MIT</span></td>
+                    <td class="sub-file">jrouwe/JoltPhysics</td>
+                </tr>
+                <tr>
+                    <td class="sub-name">Recast Navigation</td>
+                    <td><span class="os-tag">Pathfinding</span></td>
+                    <td class="sub-id">MOD 05</td>
+                    <td class="sub-desc">Génération de NavMesh et pathfinding A* utilisés par Unreal Engine, Unity, et des centaines de jeux AAA. Génère les grilles de navigation depuis la géométrie 3D du niveau. DetourCrowd gère les déplacements de groupes d'ennemis avec évitement de collisions mutuelles (parfait pour les meutes de Loups de Cristal).</td>
+                    <td><span class="status s-core">zlib</span></td>
+                    <td class="sub-file">recastnavigation/recastnavigation</td>
+                </tr>
+                <tr>
+                    <td class="sub-name">OpenAL Soft</td>
+                    <td><span class="os-tag">Audio 3D</span></td>
+                    <td class="sub-id">MOD 06</td>
+                    <td class="sub-desc">Implémentation open source complète d'OpenAL avec support HRTF intégré. Gère les HRTFs depuis des bases de données (MIT KEMAR, SADIE II). Support Doppler, atténuation, effets EFX (réverbération de caverne, écho de donjon). Alternative à FMOD sans licence commerciale.</td>
+                    <td><span class="status s-core">LGPL 2.0</span></td>
+                    <td class="sub-file">kcat/openal-soft</td>
+                </tr>
+                <tr>
+                    <td class="sub-name">Steam Audio</td>
+                    <td><span class="os-tag">Audio Spatial</span></td>
+                    <td class="sub-id">MOD 06</td>
+                    <td class="sub-desc">SDK audio de Valve pour la spatialisation avancée : occlusion sonore physiquement correcte, réverbération basée sur la géométrie de la salle, HRTF personnalisable. Open source depuis 2023. Intégration possible avec OpenAL pour une stack audio de niveau AAA sans licence.</td>
+                    <td><span class="status s-core">Apache 2.0</span></td>
+                    <td class="sub-file">ValveSoftware/steam-audio</td>
+                </tr>
+                <tr>
+                    <td class="sub-name">BrainFlow</td>
+                    <td><span class="os-tag">BCI/EEG</span></td>
+                    <td class="sub-id">MOD 07</td>
+                    <td class="sub-desc">Bibliothèque unifiée pour tous les appareils BCI (OpenBCI Cyton, Ganglion, Muse, Emotiv). API C++ unique pour lire les données EEG/EMG/PPG peu importe le hardware. Inclut des filtres DSP, des métriques cognitives pré-calculées (focus, relaxation, fatigue). Remplace en grande partie les sous-modules 7.2 à 7.4 tout en restant modifiable.</td>
+                    <td><span class="status s-core">MIT</span></td>
+                    <td class="sub-file">brainflow-dev/brainflow</td>
+                </tr>
+                <tr>
+                    <td class="sub-name">liblsl</td>
+                    <td><span class="os-tag">BCI Streaming</span></td>
+                    <td class="sub-id">MOD 07</td>
+                    <td class="sub-desc">Implémentation C++ du protocole Lab Streaming Layer. Standard des laboratoires de neurosciences pour la transmission de données temps réel avec synchronisation temporelle à la microseconde. Nécessaire pour récupérer les flux EEG d'OpenBCI ou de tout autre appareil BCI compatible LSL.</td>
+                    <td><span class="status s-core">MIT</span></td>
+                    <td class="sub-file">sccn/liblsl</td>
+                </tr>
+                <tr>
+                    <td class="sub-name">whisper.cpp</td>
+                    <td><span class="os-tag">Speech-to-Text</span></td>
+                    <td class="sub-id">MOD 08</td>
+                    <td class="sub-desc">Port C++ du modèle Whisper d'OpenAI. Fonctionne entièrement en local (offline). Accélération GPU via CUDA, Vulkan Compute, ou Metal. Modèles de tiny (75MB, latence ~100ms) à large-v3 (1.5GB, précision maximale). Intégration directe dans le moteur sans dépendance Python. Référence pour la reconnaissance vocale embarquée C++.</td>
+                    <td><span class="status s-core">MIT</span></td>
+                    <td class="sub-file">ggerganov/whisper.cpp</td>
+                </tr>
+                <tr>
+                    <td class="sub-name">GameNetworkingSockets</td>
+                    <td><span class="os-tag">Network</span></td>
+                    <td class="sub-id">MOD 09</td>
+                    <td class="sub-desc">Bibliothèque réseau de Valve utilisée dans Steam. UDP avec reliability, ordering, fragmentation, et chiffrement intégrés. Inclut une simulation de latence et de perte de paquets pour tester le MMO en conditions dégradées. Robustesse prouvée par Steam (millions d'utilisateurs simultanés).</td>
+                    <td><span class="status s-core">BSD 3</span></td>
+                    <td class="sub-file">ValveSoftware/GameNetworkingSockets</td>
+                </tr>
+                <tr>
+                    <td class="sub-name">BehaviorTree.CPP</td>
+                    <td><span class="os-tag">IA Boss</span></td>
+                    <td class="sub-id">MOD 09</td>
+                    <td class="sub-desc">Framework de Behavior Trees en C++ utilisé dans des robots industriels et jeux vidéo. Permet de définir les comportements de Lycaon, Aegis-Null et les autres boss de manière visuelle et modulaire. Compatible avec Groot2 (éditeur visuel de BT). Les comportements des boss deviennent des fichiers XML modifiables par les game designers sans recompiler.</td>
+                    <td><span class="status s-core">MIT</span></td>
+                    <td class="sub-file">BehaviorTree/BehaviorTree.CPP</td>
+                </tr>
+                <tr>
+                    <td class="sub-name">Dear ImGui</td>
+                    <td><span class="os-tag">Editor UI</span></td>
+                    <td class="sub-id">MOD 10</td>
+                    <td class="sub-desc">Bibliothèque d'interface utilisateur immédiate (immediate mode) pour debugger et éditer en temps réel. Utilisée par des centaines de studios AAA pour leurs outils internes. Backend Vulkan disponible dans les exemples officiels. Header-only, zéro dépendance externe, extrêmement rapide à intégrer.</td>
+                    <td><span class="status s-core">MIT</span></td>
+                    <td class="sub-file">ocornut/imgui</td>
+                </tr>
+                <tr>
+                    <td class="sub-name">nlohmann/json</td>
+                    <td><span class="os-tag">Sérialisation</span></td>
+                    <td class="sub-id">MOD 10</td>
+                    <td class="sub-desc">Parser/sérialiseur JSON le plus populaire en C++. Header-only, API intuitive. Utilisé pour les fichiers de configuration du moteur, les scènes d'Aetheria, le mapping des commandes vocales, et les données de calibration BCI. La référence absolue C++ pour le JSON.</td>
+                    <td><span class="status s-core">MIT</span></td>
+                    <td class="sub-file">nlohmann/json</td>
+                </tr>
+                <tr>
+                    <td class="sub-name">taskflow</td>
+                    <td><span class="os-tag">Threading</span></td>
+                    <td class="sub-id">MOD 01 / 09</td>
+                    <td class="sub-desc">Gestion de tâches parallèles modernes en C++17/20. Permet de définir des graphes de dépendances entre tâches (ex: la tâche Render ne peut pas commencer avant que Physics et EyeTracking soient terminés). Plus puissant que std::thread pour les pipelines complexes. Utilisé dans des simulations HPC et des moteurs de jeu indépendants.</td>
+                    <td><span class="status s-core">MIT</span></td>
+                    <td class="sub-file">taskflow/taskflow</td>
+                </tr>
+                <tr>
+                    <td class="sub-name">Wicked Engine</td>
+                    <td><span class="os-tag">Moteur Ref</span></td>
+                    <td class="sub-id">TOUS</td>
+                    <td class="sub-desc">Moteur de jeu C++ complet open source (Vulkan/DX12, ECS, rendu PBR, physique, réseau). À ÉTUDIER comme référence d'architecture complète avant de coder chaque module. Son code source montre comment intégrer Vulkan + ECS + physique dans un seul moteur cohérent. Ne pas le copier — s'en inspirer pour les patterns d'architecture.</td>
+                    <td><span class="status s-core">MIT</span></td>
+                    <td class="sub-file">turanszkij/WickedEngine</td>
+                </tr>
+                <tr>
+                    <td class="sub-name">Hazel Engine (The Cherno)</td>
+                    <td><span class="os-tag">Moteur Pédago</span></td>
+                    <td class="sub-id">MOD 01-03</td>
+                    <td class="sub-desc">Moteur éducatif C++ documenté par une série YouTube de 200+ épisodes. Montre pas à pas comment construire chaque couche d'un moteur moderne (ECS, Vulkan, Editor ImGui, système de scènes). La série YouTube "Game Engine" de TheCherno est la meilleure ressource d'apprentissage pratique C++ moteur disponible.</td>
+                    <td><span class="status s-core">Apache 2.0</span></td>
+                    <td class="sub-file">TheCherno/Hazel</td>
+                </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- FOOTER -->
+    <footer>
+        <div style="margin-bottom:8px;color:var(--accent);font-size:12px;">⬡ SYNAPSE ENGINE — UTOPIA SOFTWARE ENTERTAINMENT ⬡</div>
+        GitHub Projects Master Board v1.0 — Confidentiel — Dépôt Privé
+    </footer>
+
+</div>
+</body>
+</html>
