@@ -42,11 +42,13 @@ Renderer::Renderer(Window& window, u32 width, u32 height)
     PickPhysicalDevice();
     CreateDevice();
     CreateSwapchain();
+    CreateDepthResources();
     CreateRenderPass();
     CreateFramebuffers();
     CreateCommandBuffers();
     CreateSyncObjects();
     CreateVertexBuffer();
+    CreateIndexBuffer();
     CreateDescriptorObjects();
     RecreatePipeline();
 
@@ -64,6 +66,9 @@ Renderer::~Renderer()
 
     vkDestroyBuffer(m_Device, m_VertexBuffer, nullptr);
     vkFreeMemory(m_Device, m_VertexBufferMemory, nullptr);
+
+    vkDestroyBuffer(m_Device, m_IndexBuffer, nullptr);
+    vkFreeMemory(m_Device, m_IndexBufferMemory, nullptr);
 
     for (Frame& frame : m_Frames)
     {
@@ -224,16 +229,43 @@ void Renderer::CleanupDescriptorObjects()
 
 void Renderer::CreateVertexBuffer()
 {
-    constexpr float kTriangle[18] = {
-        0.0f, -0.5f, 0.0f, 1.0f, 0.0f, 0.0f,
-        0.5f,  0.5f, 0.0f, 0.0f, 1.0f, 0.0f,
-        -0.5f, 0.5f, 0.0f, 0.0f, 0.0f, 1.0f,
+    constexpr float kCubeVertices[24 * 6] = {
+        // +X (rouge)
+         0.5f, -0.5f, -0.5f, 1.0f, 0.0f, 0.0f,
+         0.5f,  0.5f, -0.5f, 1.0f, 0.0f, 0.0f,
+         0.5f,  0.5f,  0.5f, 1.0f, 0.0f, 0.0f,
+         0.5f, -0.5f,  0.5f, 1.0f, 0.0f, 0.0f,
+        // -X (vert)
+        -0.5f, -0.5f,  0.5f, 0.0f, 1.0f, 0.0f,
+        -0.5f,  0.5f,  0.5f, 0.0f, 1.0f, 0.0f,
+        -0.5f,  0.5f, -0.5f, 0.0f, 1.0f, 0.0f,
+        -0.5f, -0.5f, -0.5f, 0.0f, 1.0f, 0.0f,
+        // +Y (bleu)
+        -0.5f,  0.5f, -0.5f, 0.0f, 0.0f, 1.0f,
+        -0.5f,  0.5f,  0.5f, 0.0f, 0.0f, 1.0f,
+         0.5f,  0.5f,  0.5f, 0.0f, 0.0f, 1.0f,
+         0.5f,  0.5f, -0.5f, 0.0f, 0.0f, 1.0f,
+        // -Y (jaune)
+        -0.5f, -0.5f, -0.5f, 1.0f, 1.0f, 0.0f,
+         0.5f, -0.5f, -0.5f, 1.0f, 1.0f, 0.0f,
+         0.5f, -0.5f,  0.5f, 1.0f, 1.0f, 0.0f,
+        -0.5f, -0.5f,  0.5f, 1.0f, 1.0f, 0.0f,
+        // +Z (cyan)
+        -0.5f, -0.5f,  0.5f, 0.0f, 1.0f, 1.0f,
+         0.5f, -0.5f,  0.5f, 0.0f, 1.0f, 1.0f,
+         0.5f,  0.5f,  0.5f, 0.0f, 1.0f, 1.0f,
+        -0.5f,  0.5f,  0.5f, 0.0f, 1.0f, 1.0f,
+        // -Z (magenta)
+        -0.5f,  0.5f, -0.5f, 1.0f, 0.0f, 1.0f,
+         0.5f,  0.5f, -0.5f, 1.0f, 0.0f, 1.0f,
+         0.5f, -0.5f, -0.5f, 1.0f, 0.0f, 1.0f,
+        -0.5f, -0.5f, -0.5f, 1.0f, 0.0f, 1.0f,
     };
-    m_VertexCount = 3;
+    m_VertexCount = 24;
 
     VkBufferCreateInfo bufferInfo{};
     bufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
-    bufferInfo.size = sizeof(kTriangle);
+    bufferInfo.size = sizeof(kCubeVertices);
     bufferInfo.usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
     bufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
 
@@ -265,11 +297,64 @@ void Renderer::CreateVertexBuffer()
     VK_CHECK(vkBindBufferMemory(m_Device, m_VertexBuffer, m_VertexBufferMemory, 0));
 
     void* data = nullptr;
-    VK_CHECK(vkMapMemory(m_Device, m_VertexBufferMemory, 0, sizeof(kTriangle), 0, &data));
-    std::memcpy(data, kTriangle, sizeof(kTriangle));
+    VK_CHECK(vkMapMemory(m_Device, m_VertexBufferMemory, 0, sizeof(kCubeVertices), 0, &data));
+    std::memcpy(data, kCubeVertices, sizeof(kCubeVertices));
     vkUnmapMemory(m_Device, m_VertexBufferMemory);
 
     SYNAPSE_CORE_INFO("Vertex buffer created ({} vertices, host-visible)", m_VertexCount);
+}
+
+void Renderer::CreateIndexBuffer()
+{
+    constexpr u16 kCubeIndices[36] = {
+        0,  1,  2,  0,  2,  3,
+        4,  5,  6,  4,  6,  7,
+        8,  9,  10, 8,  10, 11,
+        12, 13, 14, 12, 14, 15,
+        16, 17, 18, 16, 18, 19,
+        20, 21, 22, 20, 22, 23,
+    };
+    m_IndexCount = 36;
+
+    VkBufferCreateInfo bufferInfo{};
+    bufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+    bufferInfo.size = sizeof(kCubeIndices);
+    bufferInfo.usage = VK_BUFFER_USAGE_INDEX_BUFFER_BIT;
+    bufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+
+    VK_CHECK(vkCreateBuffer(m_Device, &bufferInfo, nullptr, &m_IndexBuffer));
+
+    VkMemoryRequirements memRequirements{};
+    vkGetBufferMemoryRequirements(m_Device, m_IndexBuffer, &memRequirements);
+
+    VkPhysicalDeviceMemoryProperties memProperties{};
+    vkGetPhysicalDeviceMemoryProperties(m_PhysicalDevice, &memProperties);
+
+    u32 memoryType = VK_MAX_MEMORY_TYPES;
+    for (u32 i = 0; i < memProperties.memoryTypeCount; ++i)
+    {
+        if ((memRequirements.memoryTypeBits & (1u << i)) != 0 &&
+            (memProperties.memoryTypes[i].propertyFlags & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT) != 0)
+        {
+            memoryType = i;
+            break;
+        }
+    }
+
+    VkMemoryAllocateInfo allocInfo{};
+    allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+    allocInfo.allocationSize = memRequirements.size;
+    allocInfo.memoryTypeIndex = memoryType;
+
+    VK_CHECK(vkAllocateMemory(m_Device, &allocInfo, nullptr, &m_IndexBufferMemory));
+    VK_CHECK(vkBindBufferMemory(m_Device, m_IndexBuffer, m_IndexBufferMemory, 0));
+
+    void* data = nullptr;
+    VK_CHECK(vkMapMemory(m_Device, m_IndexBufferMemory, 0, sizeof(kCubeIndices), 0, &data));
+    std::memcpy(data, kCubeIndices, sizeof(kCubeIndices));
+    vkUnmapMemory(m_Device, m_IndexBufferMemory);
+
+    SYNAPSE_CORE_INFO("Index buffer created ({} indices, host-visible)", m_IndexCount);
 }
 
 void Renderer::RecreatePipeline()
@@ -475,6 +560,97 @@ void Renderer::CreateSwapchain()
                       presentMode == VK_PRESENT_MODE_MAILBOX_KHR ? "MAILBOX" : "FIFO");
 }
 
+void Renderer::CreateDepthResources()
+{
+    const VkFormat candidates[] = {VK_FORMAT_D32_SFLOAT, VK_FORMAT_D24_UNORM_S8_UINT,
+                                   VK_FORMAT_D16_UNORM};
+
+    m_DepthFormat = VK_FORMAT_UNDEFINED;
+    for (const VkFormat format : candidates)
+    {
+        VkFormatProperties props{};
+        vkGetPhysicalDeviceFormatProperties(m_PhysicalDevice, format, &props);
+        if ((props.optimalTilingFeatures & VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT) != 0)
+        {
+            m_DepthFormat = format;
+            break;
+        }
+    }
+    if (m_DepthFormat == VK_FORMAT_UNDEFINED)
+    {
+        SYNAPSE_CORE_CRITICAL("No supported depth format found");
+        std::abort();
+    }
+
+    VkImageCreateInfo imageInfo{};
+    imageInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
+    imageInfo.imageType = VK_IMAGE_TYPE_2D;
+    imageInfo.format = m_DepthFormat;
+    imageInfo.extent = {m_SwapchainExtent.width, m_SwapchainExtent.height, 1};
+    imageInfo.mipLevels = 1;
+    imageInfo.arrayLayers = 1;
+    imageInfo.samples = VK_SAMPLE_COUNT_1_BIT;
+    imageInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
+    imageInfo.usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
+    imageInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+    imageInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+
+    VK_CHECK(vkCreateImage(m_Device, &imageInfo, nullptr, &m_DepthImage));
+
+    VkMemoryRequirements memRequirements{};
+    vkGetImageMemoryRequirements(m_Device, m_DepthImage, &memRequirements);
+
+    VkPhysicalDeviceMemoryProperties memProperties{};
+    vkGetPhysicalDeviceMemoryProperties(m_PhysicalDevice, &memProperties);
+
+    u32 memoryType = VK_MAX_MEMORY_TYPES;
+    for (u32 i = 0; i < memProperties.memoryTypeCount; ++i)
+    {
+        if ((memRequirements.memoryTypeBits & (1u << i)) != 0 &&
+            (memProperties.memoryTypes[i].propertyFlags & VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT) != 0)
+        {
+            memoryType = i;
+            break;
+        }
+    }
+
+    VkMemoryAllocateInfo allocInfo{};
+    allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+    allocInfo.allocationSize = memRequirements.size;
+    allocInfo.memoryTypeIndex = memoryType;
+    VK_CHECK(vkAllocateMemory(m_Device, &allocInfo, nullptr, &m_DepthMemory));
+    VK_CHECK(vkBindImageMemory(m_Device, m_DepthImage, m_DepthMemory, 0));
+
+    VkImageViewCreateInfo viewInfo{};
+    viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+    viewInfo.image = m_DepthImage;
+    viewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
+    viewInfo.format = m_DepthFormat;
+    viewInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
+    viewInfo.subresourceRange.levelCount = 1;
+    viewInfo.subresourceRange.layerCount = 1;
+    VK_CHECK(vkCreateImageView(m_Device, &viewInfo, nullptr, &m_DepthImageView));
+}
+
+void Renderer::CleanupDepthResources()
+{
+    if (m_DepthImageView != VK_NULL_HANDLE)
+    {
+        vkDestroyImageView(m_Device, m_DepthImageView, nullptr);
+        m_DepthImageView = VK_NULL_HANDLE;
+    }
+    if (m_DepthImage != VK_NULL_HANDLE)
+    {
+        vkDestroyImage(m_Device, m_DepthImage, nullptr);
+        m_DepthImage = VK_NULL_HANDLE;
+    }
+    if (m_DepthMemory != VK_NULL_HANDLE)
+    {
+        vkFreeMemory(m_Device, m_DepthMemory, nullptr);
+        m_DepthMemory = VK_NULL_HANDLE;
+    }
+}
+
 void Renderer::CreateRenderPass()
 {
     VkAttachmentDescription colorAttachment{};
@@ -491,23 +667,43 @@ void Renderer::CreateRenderPass()
     colorRef.attachment = 0;
     colorRef.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
 
+    VkAttachmentDescription depthAttachment{};
+    depthAttachment.format = m_DepthFormat;
+    depthAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
+    depthAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+    depthAttachment.storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+    depthAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+    depthAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+    depthAttachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+    depthAttachment.finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+
+    VkAttachmentReference depthRef{};
+    depthRef.attachment = 1;
+    depthRef.layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+
     VkSubpassDescription subpass{};
     subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
     subpass.colorAttachmentCount = 1;
     subpass.pColorAttachments = &colorRef;
+    subpass.pDepthStencilAttachment = &depthRef;
 
     VkSubpassDependency dependency{};
     dependency.srcSubpass = VK_SUBPASS_EXTERNAL;
     dependency.dstSubpass = 0;
-    dependency.srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+    dependency.srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT |
+                              VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
     dependency.srcAccessMask = 0;
-    dependency.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-    dependency.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+    dependency.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT |
+                              VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
+    dependency.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT |
+                               VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+
+    const VkAttachmentDescription attachments[] = {colorAttachment, depthAttachment};
 
     VkRenderPassCreateInfo createInfo{};
     createInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
-    createInfo.attachmentCount = 1;
-    createInfo.pAttachments = &colorAttachment;
+    createInfo.attachmentCount = 2;
+    createInfo.pAttachments = attachments;
     createInfo.subpassCount = 1;
     createInfo.pSubpasses = &subpass;
     createInfo.dependencyCount = 1;
@@ -522,11 +718,13 @@ void Renderer::CreateFramebuffers()
 
     for (size_t i = 0; i < m_SwapchainImageViews.size(); ++i)
     {
+        const VkImageView attachments[] = {m_SwapchainImageViews[i], m_DepthImageView};
+
         VkFramebufferCreateInfo createInfo{};
         createInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
         createInfo.renderPass = m_RenderPass;
-        createInfo.attachmentCount = 1;
-        createInfo.pAttachments = &m_SwapchainImageViews[i];
+        createInfo.attachmentCount = 2;
+        createInfo.pAttachments = attachments;
         createInfo.width = m_SwapchainExtent.width;
         createInfo.height = m_SwapchainExtent.height;
         createInfo.layers = 1;
@@ -597,6 +795,8 @@ void Renderer::CleanupSwapchain()
         vkDestroySwapchainKHR(m_Device, m_Swapchain, nullptr);
         m_Swapchain = VK_NULL_HANDLE;
     }
+
+    CleanupDepthResources();
 }
 
 void Renderer::Draw()
@@ -626,16 +826,17 @@ void Renderer::Draw()
     beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
     VK_CHECK(vkBeginCommandBuffer(frame.commandBuffer, &beginInfo));
 
-    VkClearValue clearValue{};
-    clearValue.color = {{m_ClearColor.r, m_ClearColor.g, m_ClearColor.b, 1.0f}};
+    VkClearValue clearValues[2]{};
+    clearValues[0].color = {{m_ClearColor.r, m_ClearColor.g, m_ClearColor.b, 1.0f}};
+    clearValues[1].depthStencil = {1.0f, 0};
 
     VkRenderPassBeginInfo renderPassInfo{};
     renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
     renderPassInfo.renderPass = m_RenderPass;
     renderPassInfo.framebuffer = m_Framebuffers[imageIndex];
     renderPassInfo.renderArea.extent = m_SwapchainExtent;
-    renderPassInfo.clearValueCount = 1;
-    renderPassInfo.pClearValues = &clearValue;
+    renderPassInfo.clearValueCount = 2;
+    renderPassInfo.pClearValues = clearValues;
 
     vkCmdBeginRenderPass(frame.commandBuffer, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
 
@@ -645,7 +846,8 @@ void Renderer::Draw()
 
     VkDeviceSize offset = 0;
     vkCmdBindVertexBuffers(frame.commandBuffer, 0, 1, &m_VertexBuffer, &offset);
-    vkCmdDraw(frame.commandBuffer, m_VertexCount, 1, 0, 0);
+    vkCmdBindIndexBuffer(frame.commandBuffer, m_IndexBuffer, 0, VK_INDEX_TYPE_UINT16);
+    vkCmdDrawIndexed(frame.commandBuffer, m_IndexCount, 1, 0, 0, 0);
 
     vkCmdEndRenderPass(frame.commandBuffer);
 
@@ -680,6 +882,7 @@ void Renderer::Draw()
         vkDeviceWaitIdle(m_Device);
         CleanupSwapchain();
         CreateSwapchain();
+        CreateDepthResources();
         CreateFramebuffers();
         RecreatePipeline();
         SYNAPSE_CORE_WARN("Swapchain recreated after resize");

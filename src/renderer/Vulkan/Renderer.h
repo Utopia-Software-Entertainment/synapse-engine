@@ -56,13 +56,16 @@ private:
     void CreateDevice();
     void CreateSwapchain();
     void CreateRenderPass();
+    void CreateDepthResources();
     void CreateFramebuffers();
     void CreateCommandBuffers();
     void CreateSyncObjects();
     void CreateVertexBuffer();
+    void CreateIndexBuffer();
     void CreateDescriptorObjects();
     void RecreatePipeline();
     void CleanupSwapchain();
+    void CleanupDepthResources();
     void CleanupDescriptorObjects();
     void RecordCommandBuffer(Frame& frame, u32 imageIndex);
 
@@ -86,6 +89,10 @@ private:
     std::vector<VkFramebuffer> m_Framebuffers;
 
     VkRenderPass m_RenderPass = VK_NULL_HANDLE;
+    VkImage m_DepthImage = VK_NULL_HANDLE;
+    VkDeviceMemory m_DepthMemory = VK_NULL_HANDLE;
+    VkImageView m_DepthImageView = VK_NULL_HANDLE;
+    VkFormat m_DepthFormat = VK_FORMAT_UNDEFINED;
     VkCommandPool m_CommandPool = VK_NULL_HANDLE;
     std::vector<Frame> m_Frames;
     u32 m_FrameIndex = 0;
@@ -94,6 +101,9 @@ private:
     VkBuffer m_VertexBuffer = VK_NULL_HANDLE;
     VkDeviceMemory m_VertexBufferMemory = VK_NULL_HANDLE;
     u32 m_VertexCount = 0;
+    VkBuffer m_IndexBuffer = VK_NULL_HANDLE;
+    VkDeviceMemory m_IndexBufferMemory = VK_NULL_HANDLE;
+    u32 m_IndexCount = 0;
 
     VkDescriptorSetLayout m_DescriptorSetLayout = VK_NULL_HANDLE;
     VkDescriptorPool m_DescriptorPool = VK_NULL_HANDLE;
