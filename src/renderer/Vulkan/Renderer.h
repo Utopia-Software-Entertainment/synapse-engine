@@ -18,6 +18,7 @@ namespace synapse {
 
 class Pipeline;
 class ShadowPass;
+class SkyboxPass;
 class Window;
 
 class Renderer
@@ -110,6 +111,7 @@ private:
 
     std::unique_ptr<Pipeline> m_Pipeline;
     std::unique_ptr<ShadowPass> m_ShadowPass;
+    std::unique_ptr<SkyboxPass> m_SkyboxPass;
     VkBuffer m_VertexBuffer = VK_NULL_HANDLE;
     VkDeviceMemory m_VertexBufferMemory = VK_NULL_HANDLE;
     u32 m_VertexCount = 0;

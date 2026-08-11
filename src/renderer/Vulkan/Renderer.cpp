@@ -1,4 +1,5 @@
 #include <renderer/Vulkan/Renderer.h>
+#include <renderer/Environment/SkyboxPass.h>
 #include <renderer/Pipeline/Pipeline.h>
 #include <renderer/Shadow/ShadowPass.h>
 #include <platform/Window.h>
@@ -49,6 +50,8 @@ Renderer::Renderer(Window& window, u32 width, u32 height)
     CreateCommandBuffers();
     CreateSyncObjects();
     m_ShadowPass = std::make_unique<ShadowPass>(m_Device, m_PhysicalDevice, m_DepthFormat);
+    m_SkyboxPass = std::make_unique<SkyboxPass>(m_Device, m_PhysicalDevice, m_RenderPass,
+                                                m_QueueFamilyIndex);
     CreateTexture();
     CreateDescriptorObjects();
     RecreatePipeline();
@@ -65,6 +68,7 @@ Renderer::~Renderer()
     m_Pipeline.reset();
     CleanupDescriptorObjects();
     m_ShadowPass.reset();
+    m_SkyboxPass.reset();
 
     vkDestroyBuffer(m_Device, m_VertexBuffer, nullptr);
     vkFreeMemory(m_Device, m_VertexBufferMemory, nullptr);
@@ -1099,6 +1103,9 @@ void Renderer::Draw()
     renderPassInfo.pClearValues = clearValues;
 
     vkCmdBeginRenderPass(frame.commandBuffer, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
+
+    m_SkyboxPass->Render(frame.commandBuffer, m_SwapchainExtent,
+                         glm::inverse(m_Projection * m_View));
 
     vkCmdBindPipeline(frame.commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_Pipeline->GetHandle());
     const VkDescriptorSet sets[] = {frame.descriptorSet, frame.shadowDescriptorSet};

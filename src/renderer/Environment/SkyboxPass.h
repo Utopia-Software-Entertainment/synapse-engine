@@ -1,0 +1,45 @@
+#pragma once
+
+#include <core/Types.h>
+
+#include <glm/glm.hpp>
+
+#include <vulkan/vulkan.h>
+
+namespace synapse {
+
+class SkyboxPass
+{
+public:
+    SkyboxPass(VkDevice device, VkPhysicalDevice physicalDevice, VkRenderPass renderPass,
+               u32 queueFamilyIndex);
+    ~SkyboxPass();
+
+    SkyboxPass(const SkyboxPass&) = delete;
+    SkyboxPass& operator=(const SkyboxPass&) = delete;
+
+    void Render(VkCommandBuffer commandBuffer, VkExtent2D extent,
+                const glm::mat4& invViewProj);
+
+private:
+    void CreateCubeMap();
+    void CreateDescriptors();
+    void CreatePipeline(VkRenderPass renderPass);
+
+    VkDevice m_Device = VK_NULL_HANDLE;
+    VkPhysicalDevice m_PhysicalDevice = VK_NULL_HANDLE;
+    u32 m_QueueFamilyIndex = 0;
+
+    static constexpr u32 kFaceSize = 128;
+    VkImage m_Image = VK_NULL_HANDLE;
+    VkDeviceMemory m_Memory = VK_NULL_HANDLE;
+    VkImageView m_ImageView = VK_NULL_HANDLE;
+    VkSampler m_Sampler = VK_NULL_HANDLE;
+    VkDescriptorSetLayout m_SetLayout = VK_NULL_HANDLE;
+    VkDescriptorPool m_Pool = VK_NULL_HANDLE;
+    VkDescriptorSet m_Set = VK_NULL_HANDLE;
+    VkPipelineLayout m_PipelineLayout = VK_NULL_HANDLE;
+    VkPipeline m_Pipeline = VK_NULL_HANDLE;
+};
+
+} // namespace synapse

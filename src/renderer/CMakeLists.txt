@@ -18,6 +18,7 @@ add_library(synapse_renderer
     Culling/CullingSystem.cpp
     Shadow/ShadowPass.cpp
     Shadow/CascadedShadowMap.cpp
+    Environment/SkyboxPass.cpp
     Stereo/StereoRenderer.cpp
     Foveated/FoveatedPass.cpp
     PostProcess/PostProcess.cpp
@@ -47,6 +48,8 @@ set(SHADER_LIST
     triangle.vert
     triangle.frag
     shadow.vert
+    skybox.vert
+    skybox.frag
 )
 
 set(SHADER_OUTPUTS "")
