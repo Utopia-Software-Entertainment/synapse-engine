@@ -67,6 +67,17 @@ int main()
     auto lastTime = std::chrono::steady_clock::now();
     const auto startTime = lastTime;
 
+    GLFWwindow* handle = window.GetHandle();
+    glfwSetInputMode(handle, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+    if (glfwRawMouseMotionSupported())
+    {
+        glfwSetInputMode(handle, GLFW_RAW_MOUSE_MOTION, GLFW_TRUE);
+    }
+
+    double lastMouseX = 0.0;
+    double lastMouseY = 0.0;
+    bool firstMouse = true;
+
     while (engine.Running() && !window.ShouldClose())
     {
         window.PollEvents();
@@ -76,6 +87,7 @@ int main()
         lastTime = std::chrono::steady_clock::now();
 
         const float speed = 3.0f * deltaTime;
+        const float lookSpeed = 30.0f * deltaTime;
 
         GLFWwindow* handle = window.GetHandle();
         if (glfwGetKey(handle, GLFW_KEY_W) == GLFW_PRESS)
@@ -102,14 +114,37 @@ int main()
         {
             camera.Move(glm::vec3(0.0f, speed, 0.0f));
         }
-        if (glfwGetKey(handle, GLFW_KEY_LEFT) == GLFW_PRESS || glfwGetKey(handle, GLFW_KEY_UP) == GLFW_PRESS)
+        if (glfwGetKey(handle, GLFW_KEY_LEFT) == GLFW_PRESS)
         {
-            camera.Rotate(30.0f * deltaTime, 0.0f);
+            camera.Rotate(lookSpeed, 0.0f);
         }
-        if (glfwGetKey(handle, GLFW_KEY_RIGHT) == GLFW_PRESS || glfwGetKey(handle, GLFW_KEY_DOWN) == GLFW_PRESS)
+        if (glfwGetKey(handle, GLFW_KEY_RIGHT) == GLFW_PRESS)
         {
-            camera.Rotate(-30.0f * deltaTime, 0.0f);
+            camera.Rotate(-lookSpeed, 0.0f);
         }
+        if (glfwGetKey(handle, GLFW_KEY_UP) == GLFW_PRESS)
+        {
+            camera.Rotate(0.0f, lookSpeed);
+        }
+        if (glfwGetKey(handle, GLFW_KEY_DOWN) == GLFW_PRESS)
+        {
+            camera.Rotate(0.0f, -lookSpeed);
+        }
+
+        double mouseX = 0.0;
+        double mouseY = 0.0;
+        glfwGetCursorPos(handle, &mouseX, &mouseY);
+        if (firstMouse)
+        {
+            lastMouseX = mouseX;
+            lastMouseY = mouseY;
+            firstMouse = false;
+        }
+        const float mouseSensitivity = 0.12f;
+        camera.Rotate(static_cast<float>(lastMouseX - mouseX) * mouseSensitivity,
+                      static_cast<float>(mouseY - lastMouseY) * mouseSensitivity);
+        lastMouseX = mouseX;
+        lastMouseY = mouseY;
 
         camera.SetAspectRatio(static_cast<float>(window.GetWidth()) / static_cast<float>(window.GetHeight()));
 
