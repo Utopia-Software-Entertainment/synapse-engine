@@ -12,12 +12,14 @@ Pipeline::Pipeline(VkDevice device, VkRenderPass renderPass, VkExtent2D extent,
                    const VkDescriptorSetLayout* setLayouts, u32 setLayoutCount,
                    std::string_view vertShader, std::string_view fragShader,
                    u32 pushConstantSize, std::string_view vertSourcePath,
-                   std::string_view fragSourcePath)
+                   std::string_view fragSourcePath,
+                   VkSampleCountFlagBits sampleCount)
     : m_Device(device),
       m_RenderPass(renderPass),
       m_Extent(extent),
       m_SetLayouts(setLayouts, setLayouts + setLayoutCount),
       m_PushConstantSize(pushConstantSize),
+      m_SampleCount(sampleCount),
       m_VertSourcePath(vertSourcePath),
       m_FragSourcePath(fragSourcePath)
 {
@@ -217,7 +219,7 @@ VkPipeline Pipeline::BuildGraphicsPipeline(VkShaderModule vertModule, VkShaderMo
     VkPipelineMultisampleStateCreateInfo multisampling{};
     multisampling.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
     multisampling.sampleShadingEnable = VK_FALSE;
-    multisampling.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
+    multisampling.rasterizationSamples = m_SampleCount;
 
     VkPipelineDepthStencilStateCreateInfo depthStencil{};
     depthStencil.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;

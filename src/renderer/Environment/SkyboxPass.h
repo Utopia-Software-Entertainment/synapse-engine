@@ -17,7 +17,7 @@ class SkyboxPass
 {
 public:
     SkyboxPass(VkDevice device, VkPhysicalDevice physicalDevice, VkRenderPass renderPass,
-               u32 queueFamilyIndex);
+               u32 queueFamilyIndex, VkSampleCountFlagBits sampleCount = VK_SAMPLE_COUNT_1_BIT);
     ~SkyboxPass();
 
     SkyboxPass(const SkyboxPass&) = delete;
@@ -37,6 +37,7 @@ private:
     VkDevice m_Device = VK_NULL_HANDLE;
     VkPhysicalDevice m_PhysicalDevice = VK_NULL_HANDLE;
     u32 m_QueueFamilyIndex = 0;
+    VkSampleCountFlagBits m_SampleCount = VK_SAMPLE_COUNT_1_BIT;
 
     static constexpr u32 kFaceSize = 128;
     VkImage m_Image = VK_NULL_HANDLE;

@@ -69,6 +69,7 @@ private:
     void CreateSwapchain();
     void CreateRenderPass();
     void CreateDepthResources();
+    void CreateMSAAResources();
     void CreateFramebuffers();
     void CreateCommandBuffers();
     void CreateSyncObjects();
@@ -77,8 +78,10 @@ private:
     void RecreatePipeline();
     void CleanupSwapchain();
     void CleanupDepthResources();
+    void CleanupMSAAResources();
     void CleanupDescriptorObjects();
     void CleanupTexture();
+    VkSampleCountFlagBits GetMaxSampleCount();
     VkBuffer CreateDeviceBuffer(u32 size, VkBufferUsageFlags usage, const void* data,
                                 VkDeviceMemory* outMemory);
     void CreateHostVisibleBuffer(VkDeviceSize size, VkBufferUsageFlags usage, VkBuffer* outBuffer,
@@ -107,6 +110,10 @@ private:
     std::vector<VkFramebuffer> m_Framebuffers;
 
     VkRenderPass m_RenderPass = VK_NULL_HANDLE;
+    VkSampleCountFlagBits m_MSAASamples = VK_SAMPLE_COUNT_1_BIT;
+    VkImage m_MSAAColorImage = VK_NULL_HANDLE;
+    VkDeviceMemory m_MSAAColorMemory = VK_NULL_HANDLE;
+    VkImageView m_MSAAColorView = VK_NULL_HANDLE;
     VkImage m_DepthImage = VK_NULL_HANDLE;
     VkDeviceMemory m_DepthMemory = VK_NULL_HANDLE;
     VkImageView m_DepthImageView = VK_NULL_HANDLE;

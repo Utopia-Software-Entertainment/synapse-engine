@@ -114,8 +114,11 @@ void EndSingleTime(VkDevice device, VkQueue queue, VkCommandPool pool, VkCommand
 } // namespace
 
 SkyboxPass::SkyboxPass(VkDevice device, VkPhysicalDevice physicalDevice, VkRenderPass renderPass,
-                       u32 queueFamilyIndex)
-    : m_Device(device), m_PhysicalDevice(physicalDevice), m_QueueFamilyIndex(queueFamilyIndex)
+                       u32 queueFamilyIndex, VkSampleCountFlagBits sampleCount)
+    : m_Device(device),
+      m_PhysicalDevice(physicalDevice),
+      m_QueueFamilyIndex(queueFamilyIndex),
+      m_SampleCount(sampleCount)
 {
     CreateCubeMap();
     CreateDescriptors();
@@ -450,7 +453,7 @@ void SkyboxPass::CreatePipeline(std::string_view vertSpirv, std::string_view fra
 
     VkPipelineMultisampleStateCreateInfo multisampling{};
     multisampling.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
-    multisampling.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
+    multisampling.rasterizationSamples = m_SampleCount;
 
     VkPipelineDepthStencilStateCreateInfo depthStencil{};
     depthStencil.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
