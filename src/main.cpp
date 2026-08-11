@@ -73,7 +73,10 @@ int main()
     synapse::physics::ShapeDesc sphereShape;
     sphereShape.kind = synapse::physics::ShapeKind::Sphere;
     sphereShape.radius = 0.5f;
-    synapse::physics::RigidBody sphereBody(world, sphereShape, glm::vec3(0.0f, 2.5f, 0.0f));
+    synapse::physics::RigidBody sphereBody(world, sphereShape, glm::vec3(-1.5f, 2.0f, 0.0f),
+                                           glm::quat(1.0f, 0.0f, 0.0f, 0.0f),
+                                           synapse::physics::MotionType::Dynamic, 0.5f, 0.35f);
+    sphereBody.SetLinearVelocity(glm::vec3(2.2f, 0.0f, 0.0f));
 
     std::array<synapse::physics::RigidBody, 6> orbitBodies{
         synapse::physics::RigidBody(world, synapse::physics::ShapeDesc{},
@@ -199,7 +202,7 @@ int main()
         transforms.reserve(9);
         items.reserve(4);
 
-        transforms.push_back(floorBody.GetModelMatrix());
+        transforms.push_back(glm::mat4(1.0f));
         items.push_back({kFloorFirstIndex, kFloorIndexCount, 0, 1});
 
         transforms.push_back(cubeBody.GetModelMatrix());

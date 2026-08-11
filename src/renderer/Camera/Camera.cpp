@@ -47,12 +47,9 @@ void Camera::Rotate(f32 yawDegrees, f32 pitchDegrees)
 void Camera::Move(glm::vec3 offset)
 {
     const f32 yawRad = glm::radians(m_Yaw);
-    const f32 pitchRad = glm::radians(m_Pitch);
-    const glm::vec3 forward(std::sin(yawRad) * std::cos(pitchRad), std::sin(pitchRad),
-                            -std::cos(yawRad) * std::cos(pitchRad));
+    const glm::vec3 forward(std::sin(yawRad), 0.0f, -std::cos(yawRad));
     const glm::vec3 right = glm::normalize(glm::cross(forward, glm::vec3(0.0f, 1.0f, 0.0f)));
-    const glm::vec3 up = glm::cross(right, forward);
-    m_Position += right * offset.x + up * offset.y + forward * offset.z;
+    m_Position += right * offset.x + glm::vec3(0.0f, 1.0f, 0.0f) * offset.y + forward * offset.z;
 }
 
 } // namespace synapse
