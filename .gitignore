@@ -38,6 +38,16 @@ third_party/*/
 assets/cache/
 !assets/models/*.obj
 
+# Poids de modèles IA (hors git : volumineux, licences non-commerciales)
+assets/models/crisper/
+assets/models/whisper/
+
+# Téléchargements ratés / fichiers invalides (404 ou page HTML)
+assets/models/city.glb
+assets/models/milestones.glb
+assets/models/sponza.glb
+assets/models/house.glb
+
 # Logs
 logs/
 *.log
