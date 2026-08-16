@@ -86,4 +86,15 @@ JPH::PhysicsSystem& PhysicsWorld::GetPhysicsSystem()
     return *m_System;
 }
 
+JPH::TempAllocator& PhysicsWorld::GetTempAllocator()
+{
+    return *m_TempAllocator;
+}
+
+glm::vec3 PhysicsWorld::GetGravity() const
+{
+    const JPH::Vec3 g = m_System->GetGravity();
+    return glm::vec3(g.GetX(), g.GetY(), g.GetZ());
+}
+
 } // namespace synapse::physics

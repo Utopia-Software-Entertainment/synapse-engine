@@ -57,6 +57,9 @@ public:
     glm::quat GetRotation() const;
 
     void SetLinearVelocity(const glm::vec3& velocity);
+    void EnableCCD(bool enable);
+
+    u32 GetBodyID() const;
 
 private:
     PhysicsWorld& m_World;

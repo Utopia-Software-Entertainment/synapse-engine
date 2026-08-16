@@ -7,6 +7,12 @@ std::shared_ptr<spdlog::logger> Logger::s_ClientLogger;
 
 void Logger::Init()
 {
+    // Idempotent : ne recrée jamais les loggers déjà initialisés.
+    if (s_CoreLogger != nullptr)
+    {
+        return;
+    }
+
     // Console sink (colored, multi-threaded)
     auto consoleSink = std::make_shared<spdlog::sinks::stdout_color_sink_mt>();
     consoleSink->set_pattern("%^[%T] %n: %v%$");

@@ -22,7 +22,8 @@ public:
              std::string_view vertShader, std::string_view fragShader,
              u32 pushConstantSize = 0, std::string_view vertSourcePath = {},
              std::string_view fragSourcePath = {},
-             VkSampleCountFlagBits sampleCount = VK_SAMPLE_COUNT_1_BIT);
+             VkSampleCountFlagBits sampleCount = VK_SAMPLE_COUNT_1_BIT,
+             u32 subpass = 0);
     ~Pipeline();
 
     Pipeline(const Pipeline&) = delete;
@@ -43,6 +44,7 @@ private:
     std::vector<VkDescriptorSetLayout> m_SetLayouts;
     u32 m_PushConstantSize = 0;
     VkSampleCountFlagBits m_SampleCount = VK_SAMPLE_COUNT_1_BIT;
+    u32 m_Subpass = 0;
 
     VkPipelineLayout m_Layout = VK_NULL_HANDLE;
     VkPipeline m_Pipeline = VK_NULL_HANDLE;

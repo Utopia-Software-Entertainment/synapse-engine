@@ -20,6 +20,7 @@ namespace synapse {
 class Pipeline;
 class ShadowPass;
 class SkyboxPass;
+class PostProcess;
 class Window;
 class MemoryAllocator;
 
@@ -32,13 +33,17 @@ public:
     Renderer(const Renderer&) = delete;
     Renderer& operator=(const Renderer&) = delete;
 
-    void Draw();
+    void Draw(float totalTime);
     void SetClearColor(glm::vec3 color);
     void SetViewProjection(glm::mat4 view, glm::mat4 proj);
     void SetLightViewProjection(glm::mat4 lightViewProj);
     void SetInstanceTransforms(const glm::mat4* transforms, u32 count);
     void SetDrawItems(std::vector<DrawItem> items);
     void SetGeometry(const Mesh& mesh);
+
+    // Dynamic mesh management
+    struct MeshRange { u32 firstIndex; u32 indexCount; i32 vertexOffset; };
+    MeshRange UploadMesh(const Mesh& mesh);
 
 private:
     struct Frame
@@ -62,6 +67,8 @@ private:
         glm::mat4 view;
         glm::mat4 proj;
         glm::mat4 lightVP;
+        glm::vec4 camPos;  // xyz = position, w = padding
+        glm::vec4 sunDir;  // xyz = direction, w = padding
     };
 
     void CreateInstance();
@@ -83,6 +90,8 @@ private:
     void CleanupMSAAResources();
     void CleanupDescriptorObjects();
     void CleanupTexture();
+    void CreateOffscreenResources();
+    void CleanupOffscreenResources();
     VkSampleCountFlagBits GetMaxSampleCount();
     VkBuffer CreateDeviceBuffer(u32 size, VkBufferUsageFlags usage, const void* data,
                                 VmaAllocation* outMemory);
@@ -120,6 +129,13 @@ private:
     VmaAllocation m_DepthMemory = VK_NULL_HANDLE;
     VkImageView m_DepthImageView = VK_NULL_HANDLE;
     VkFormat m_DepthFormat = VK_FORMAT_UNDEFINED;
+
+    // Offscreen HDR
+    VkImage m_OffscreenImage = VK_NULL_HANDLE;
+    VmaAllocation m_OffscreenMemory = VK_NULL_HANDLE;
+    VkImageView m_OffscreenView = VK_NULL_HANDLE;
+    VkFormat m_OffscreenFormat = VK_FORMAT_R16G16B16A16_SFLOAT;
+
     VkCommandPool m_CommandPool = VK_NULL_HANDLE;
     std::vector<Frame> m_Frames;
     u32 m_FrameIndex = 0;
@@ -127,6 +143,7 @@ private:
     std::unique_ptr<Pipeline> m_Pipeline;
     std::unique_ptr<ShadowPass> m_ShadowPass;
     std::unique_ptr<SkyboxPass> m_SkyboxPass;
+    std::unique_ptr<PostProcess> m_PostProcess;
     std::unique_ptr<MemoryAllocator> m_Allocator;
     VkBuffer m_VertexBuffer = VK_NULL_HANDLE;
     VmaAllocation m_VertexBufferMemory = VK_NULL_HANDLE;

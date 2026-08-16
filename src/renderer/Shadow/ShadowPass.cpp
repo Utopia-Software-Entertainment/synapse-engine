@@ -357,8 +357,8 @@ void ShadowPass::Render(VkCommandBuffer commandBuffer, VkBuffer vertexBuffer,
 
     for (const DrawItem& item : items)
     {
-        vkCmdDrawIndexed(commandBuffer, item.indexCount, item.instanceCount, item.firstIndex, 0,
-                         item.firstInstance);
+        vkCmdDrawIndexed(commandBuffer, item.indexCount, item.instanceCount, item.firstIndex,
+                         item.vertexOffset, item.firstInstance);
     }
 
     vkCmdEndRenderPass(commandBuffer);

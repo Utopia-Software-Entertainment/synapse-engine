@@ -1,0 +1,62 @@
+{
+  "profile_name": "DevLaptop1",
+  "detected_on": "2026-08-15",
+  "note": "Profil matériel détecté localement. Regénérable avec scripts/tools/detect_hardware.sh. Utilisé par config/ai_toolchain.json pour décider quels outils/quantifications sont faisables.",
+
+  "cpu": {
+    "model": "AMD Ryzen 7 7735H with Radeon Graphics",
+    "cores": 8,
+    "threads": 16,
+    "max_freq_mhz": 4830
+  },
+
+  "memory": {
+    "total_gib": 14,
+    "available_at_detection_gib": 3.2,
+    "swap_gib": 20,
+    "warning": "14 Go de RAM = contrainte forte. Les modèles 27B en Q4 ne peuvent PAS résider en RAM. Voir ai_toolchain.json."
+  },
+
+  "gpus": {
+    "primary": {
+      "name": "NVIDIA GeForce RTX 4060 Max-Q / Mobile",
+      "vram_gib": 8,
+      "driver": "580.173.02",
+      "cuda_version": "13.0",
+      "vulkan_api": "1.4.312",
+      "role": "VR rendering + inference occasionnelle"
+    },
+    "integrated": {
+      "name": "AMD Radeon 680M (RADV REMBRANDT)",
+      "vram_shared_gib": 4,
+      "vulkan_api": "1.4.318",
+      "role": "fallback / rendu de secours"
+    },
+    "llvmpipe": {
+      "name": "llvmpipe (LLVM 20.1.2)",
+      "role": "software rasterizer — non exploitable pour le jeu"
+    }
+  },
+
+  "disk": {
+    "root": {
+      "mount": "/",
+      "total_gib": 468,
+      "free_gib": 59,
+      "warning": "59 Go libres. MiniMax H3 (~16-33 Go) et Wan Animate 2 (~16-33 Go) ne peuvent PAS être tous les deux installés à plein."
+    }
+  },
+
+  "os": {
+    "distro": "Ubuntu 24.04",
+    "kernel_mesa": "Mesa 25.2.8"
+  },
+
+  "constraints_summary": [
+    "VRAM 8 Go : Q4_K_M de Qwen3.8-27B (17,1 Go) IMPOSSIBLE. Plafond pratique ~9-10 Go quant Q2/Q3 + offload CPU.",
+    "RAM 14 Go : exécution CPU de modèles 27B impossible confortablement.",
+    "Whisper : excellent sur CPU (200M-2B params), ne touche pas la VRAM = VOIX OK sans impacter le rendu VR 90FPS.",
+    "MiniMax H3 / Wan Animate 2 : à utiliser en tooling offline occasionnel (quantifications agressives), jamais en runtime.",
+    "59 Go disque : budget modèles partagé, à suivre."
+  ]
+}

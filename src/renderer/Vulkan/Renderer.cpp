@@ -2,6 +2,7 @@
 #include <renderer/Environment/SkyboxPass.h>
 #include <renderer/Pipeline/Pipeline.h>
 #include <renderer/Shadow/ShadowPass.h>
+#include <renderer/PostProcess/PostProcess.h>
 #include <platform/Window.h>
 
 #include <triangle.vert.h>
@@ -49,6 +50,7 @@ Renderer::Renderer(Window& window, u32 width, u32 height)
     CreateSwapchain();
     m_MSAASamples = GetMaxSampleCount();
     CreateMSAAResources();
+    CreateOffscreenResources();
     CreateDepthResources();
     CreateRenderPass();
     CreateFramebuffers();
@@ -63,6 +65,12 @@ Renderer::Renderer(Window& window, u32 width, u32 height)
     CreateDescriptorObjects();
     RecreatePipeline();
 
+    // Initialize large global buffers (e.g. 100MB for vertices, 50MB for indices)
+    m_VertexBuffer = CreateDeviceBuffer(100 * 1024 * 1024, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, nullptr, &m_VertexBufferMemory);
+    m_IndexBuffer = CreateDeviceBuffer(50 * 1024 * 1024, VK_BUFFER_USAGE_INDEX_BUFFER_BIT, nullptr, &m_IndexBufferMemory);
+    m_VertexCount = 0;
+    m_IndexCount = 0;
+
     SYNAPSE_CORE_INFO("Vulkan renderer initialized ({}x{}, {} swapchain images)",
                       m_SwapchainExtent.width, m_SwapchainExtent.height,
                       m_SwapchainImages.size());
@@ -73,12 +81,19 @@ Renderer::~Renderer()
     vkDeviceWaitIdle(m_Device);
 
     m_Pipeline.reset();
+    m_PostProcess.reset();
     CleanupDescriptorObjects();
     m_ShadowPass.reset();
     m_SkyboxPass.reset();
 
-    vmaDestroyBuffer(m_Allocator->Handle(), m_VertexBuffer, m_VertexBufferMemory);
-    vmaDestroyBuffer(m_Allocator->Handle(), m_IndexBuffer, m_IndexBufferMemory);
+    if (m_VertexBuffer != VK_NULL_HANDLE)
+    {
+        vmaDestroyBuffer(m_Allocator->Handle(), m_VertexBuffer, m_VertexBufferMemory);
+    }
+    if (m_IndexBuffer != VK_NULL_HANDLE)
+    {
+        vmaDestroyBuffer(m_Allocator->Handle(), m_IndexBuffer, m_IndexBufferMemory);
+    }
 
     CleanupTexture();
 
@@ -90,8 +105,13 @@ Renderer::~Renderer()
     }
 
     CleanupSwapchain();
+    CleanupOffscreenResources();
     vkDestroyRenderPass(m_Device, m_RenderPass, nullptr);
     vkDestroyCommandPool(m_Device, m_CommandPool, nullptr);
+
+    // Destroy allocator before device
+    m_Allocator.reset();
+
     vkDestroyDevice(m_Device, nullptr);
     vkDestroySurfaceKHR(m_Instance, m_Surface, nullptr);
     vkDestroyInstance(m_Instance, nullptr);
@@ -132,7 +152,7 @@ void Renderer::CreateDescriptorObjects()
     bindings[0].binding = 0;
     bindings[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
     bindings[0].descriptorCount = 1;
-    bindings[0].stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+    bindings[0].stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT;
     bindings[1].binding = 1;
     bindings[1].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
     bindings[1].descriptorCount = 1;
@@ -308,18 +328,20 @@ VkBuffer Renderer::CreateDeviceBuffer(u32 size, VkBufferUsageFlags usage, const 
     VkBuffer stagingBuffer = VK_NULL_HANDLE;
     VmaAllocation stagingMemory = VK_NULL_HANDLE;
     VmaAllocationInfo stagingAllocationInfo{};
-    VK_CHECK(vmaCreateBuffer(m_Allocator->Handle(), &stagingInfo, &stagingAllocInfo,
-                             &stagingBuffer, &stagingMemory, &stagingAllocationInfo));
+    if (data != nullptr) {
+        VK_CHECK(vmaCreateBuffer(m_Allocator->Handle(), &stagingInfo, &stagingAllocInfo,
+                                 &stagingBuffer, &stagingMemory, &stagingAllocationInfo));
 
-    std::memcpy(stagingAllocationInfo.pMappedData, data, size);
+        std::memcpy(stagingAllocationInfo.pMappedData, data, size);
 
-    VkCommandBuffer cmd = BeginSingleTimeCommands();
-    VkBufferCopy copyRegion{};
-    copyRegion.size = size;
-    vkCmdCopyBuffer(cmd, stagingBuffer, buffer, 1, &copyRegion);
-    EndSingleTimeCommands(cmd);
+        VkCommandBuffer cmd = BeginSingleTimeCommands();
+        VkBufferCopy copyRegion{};
+        copyRegion.size = size;
+        vkCmdCopyBuffer(cmd, stagingBuffer, buffer, 1, &copyRegion);
+        EndSingleTimeCommands(cmd);
 
-    vmaDestroyBuffer(m_Allocator->Handle(), stagingBuffer, stagingMemory);
+        vmaDestroyBuffer(m_Allocator->Handle(), stagingBuffer, stagingMemory);
+    }
 
     return buffer;
 }
@@ -378,17 +400,59 @@ void Renderer::EndSingleTimeCommands(VkCommandBuffer commandBuffer)
 
 void Renderer::SetGeometry(const Mesh& mesh)
 {
-    m_VertexBuffer = CreateDeviceBuffer(static_cast<u32>(mesh.vertices.size() * sizeof(MeshVertex)),
-                                        VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
-                                        mesh.vertices.data(), &m_VertexBufferMemory);
-    m_IndexBuffer = CreateDeviceBuffer(static_cast<u32>(mesh.indices.size() * sizeof(u16)),
-                                       VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
-                                       mesh.indices.data(), &m_IndexBufferMemory);
-    m_VertexCount = static_cast<u32>(mesh.vertices.size());
-    m_IndexCount = static_cast<u32>(mesh.indices.size());
+    // Legacy support: reset and upload
+    m_VertexCount = 0;
+    m_IndexCount = 0;
+    UploadMesh(mesh);
+}
 
-    SYNAPSE_CORE_INFO("Geometry set ({} vertices, {} indices, device-local)",
-                      m_VertexCount, m_IndexCount);
+Renderer::MeshRange Renderer::UploadMesh(const Mesh& mesh)
+{
+    u32 vSize = static_cast<u32>(mesh.vertices.size() * sizeof(MeshVertex));
+    u32 iSize = static_cast<u32>(mesh.indices.size() * sizeof(u16));
+
+    if (vSize == 0 || iSize == 0) return {0, 0, 0};
+
+    // Staging buffers for transfer
+    VkBufferCreateInfo vStagingInfo{VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO};
+    vStagingInfo.size = vSize;
+    vStagingInfo.usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
+
+    VmaAllocationCreateInfo stagingAlloc{};
+    stagingAlloc.usage = VMA_MEMORY_USAGE_CPU_ONLY; // Reliable fallback for older VMA or specific setups
+    stagingAlloc.flags = VMA_ALLOCATION_CREATE_MAPPED_BIT;
+
+    VkBuffer vStaging; VmaAllocation vAlloc; VmaAllocationInfo vInfo;
+    VK_CHECK(vmaCreateBuffer(m_Allocator->Handle(), &vStagingInfo, &stagingAlloc, &vStaging, &vAlloc, &vInfo));
+    std::memcpy(vInfo.pMappedData, mesh.vertices.data(), vSize);
+
+    VkBufferCreateInfo iStagingInfo{VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO};
+    iStagingInfo.size = iSize;
+    iStagingInfo.usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
+
+    VkBuffer iStaging; VmaAllocation iAlloc; VmaAllocationInfo iInfo;
+    VK_CHECK(vmaCreateBuffer(m_Allocator->Handle(), &iStagingInfo, &stagingAlloc, &iStaging, &iAlloc, &iInfo));
+    std::memcpy(iInfo.pMappedData, mesh.indices.data(), iSize);
+
+    VkCommandBuffer cmd = BeginSingleTimeCommands();
+    VkBufferCopy vCopy{0, m_VertexCount * sizeof(MeshVertex), vSize};
+    vkCmdCopyBuffer(cmd, vStaging, m_VertexBuffer, 1, &vCopy);
+    VkBufferCopy iCopy{0, m_IndexCount * sizeof(u16), iSize};
+    vkCmdCopyBuffer(cmd, iStaging, m_IndexBuffer, 1, &iCopy);
+    EndSingleTimeCommands(cmd);
+
+    vmaDestroyBuffer(m_Allocator->Handle(), vStaging, vAlloc);
+    vmaDestroyBuffer(m_Allocator->Handle(), iStaging, iAlloc);
+
+    MeshRange range;
+    range.firstIndex = m_IndexCount;
+    range.indexCount = static_cast<u32>(mesh.indices.size());
+    range.vertexOffset = static_cast<i32>(m_VertexCount);
+
+    m_VertexCount += static_cast<u32>(mesh.vertices.size());
+    m_IndexCount += static_cast<u32>(mesh.indices.size());
+
+    return range;
 }
 
 void Renderer::CreateTexture()
@@ -604,7 +668,10 @@ void Renderer::RecreatePipeline()
         std::string_view(reinterpret_cast<const char*>(synapse::triangle_frag_data) + 0,
                          synapse::triangle_frag_size),
         0, SYNAPSE_SHADER_DIR "/triangle.vert.glsl", SYNAPSE_SHADER_DIR "/triangle.frag.glsl",
-        m_MSAASamples);
+        m_MSAASamples, 0);
+
+    m_PostProcess = std::make_unique<PostProcess>(m_Device, m_RenderPass, m_SwapchainExtent,
+                                                  m_OffscreenView, m_TextureSampler);
 }
 
 void Renderer::CreateInstance()
@@ -849,13 +916,13 @@ void Renderer::CreateMSAAResources()
     VkImageCreateInfo imageInfo{};
     imageInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
     imageInfo.imageType = VK_IMAGE_TYPE_2D;
-    imageInfo.format = m_SwapchainFormat;
+    imageInfo.format = m_OffscreenFormat;
     imageInfo.extent = {m_SwapchainExtent.width, m_SwapchainExtent.height, 1};
     imageInfo.mipLevels = 1;
     imageInfo.arrayLayers = 1;
     imageInfo.samples = m_MSAASamples;
     imageInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
-    imageInfo.usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+    imageInfo.usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT | VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT;
     imageInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
     imageInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
 
@@ -870,7 +937,7 @@ void Renderer::CreateMSAAResources()
     viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
     viewInfo.image = m_MSAAColorImage;
     viewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
-    viewInfo.format = m_SwapchainFormat;
+    viewInfo.format = m_OffscreenFormat;
     viewInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
     viewInfo.subresourceRange.levelCount = 1;
     viewInfo.subresourceRange.layerCount = 1;
@@ -889,6 +956,57 @@ void Renderer::CleanupMSAAResources()
         vmaDestroyImage(m_Allocator->Handle(), m_MSAAColorImage, m_MSAAColorMemory);
         m_MSAAColorImage = VK_NULL_HANDLE;
         m_MSAAColorMemory = VK_NULL_HANDLE;
+    }
+}
+
+void Renderer::CreateOffscreenResources()
+{
+    VkImageCreateInfo imageInfo{};
+    imageInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
+    imageInfo.imageType = VK_IMAGE_TYPE_2D;
+    imageInfo.format = m_OffscreenFormat;
+    imageInfo.extent = {m_SwapchainExtent.width, m_SwapchainExtent.height, 1};
+    imageInfo.mipLevels = 1;
+    imageInfo.arrayLayers = 1;
+    imageInfo.samples = VK_SAMPLE_COUNT_1_BIT;
+    imageInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
+    imageInfo.usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT;
+    imageInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+    imageInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+
+    VmaAllocationCreateInfo gpuAllocInfo{};
+    gpuAllocInfo.usage = VMA_MEMORY_USAGE_GPU_ONLY;
+
+    VK_CHECK(vmaCreateImage(m_Allocator->Handle(), &imageInfo, &gpuAllocInfo, &m_OffscreenImage,
+                            &m_OffscreenMemory, nullptr));
+
+    VkImageViewCreateInfo viewInfo{};
+    viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+    viewInfo.image = m_OffscreenImage;
+    viewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
+    viewInfo.format = m_OffscreenFormat;
+    viewInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    viewInfo.subresourceRange.levelCount = 1;
+    viewInfo.subresourceRange.layerCount = 1;
+    VK_CHECK(vkCreateImageView(m_Device, &viewInfo, nullptr, &m_OffscreenView));
+
+    SYNAPSE_CORE_INFO("Offscreen HDR resources created ({}x{}, {})",
+                      m_SwapchainExtent.width, m_SwapchainExtent.height,
+                      "R16G16B16A16_SFLOAT");
+}
+
+void Renderer::CleanupOffscreenResources()
+{
+    if (m_OffscreenView != VK_NULL_HANDLE)
+    {
+        vkDestroyImageView(m_Device, m_OffscreenView, nullptr);
+        m_OffscreenView = VK_NULL_HANDLE;
+    }
+    if (m_OffscreenImage != VK_NULL_HANDLE)
+    {
+        vmaDestroyImage(m_Allocator->Handle(), m_OffscreenImage, m_OffscreenMemory);
+        m_OffscreenImage = VK_NULL_HANDLE;
+        m_OffscreenMemory = VK_NULL_HANDLE;
     }
 }
 
@@ -962,82 +1080,98 @@ void Renderer::CleanupDepthResources()
 
 void Renderer::CreateRenderPass()
 {
-    VkAttachmentDescription colorAttachment{};
-    colorAttachment.format = m_SwapchainFormat;
-    colorAttachment.samples = m_MSAASamples;
-    colorAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
-    colorAttachment.storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-    colorAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-    colorAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-    colorAttachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-    colorAttachment.finalLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+    // 0: MSAA HDR
+    VkAttachmentDescription msaaColorAttachment{};
+    msaaColorAttachment.format = m_OffscreenFormat;
+    msaaColorAttachment.samples = m_MSAASamples;
+    msaaColorAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+    msaaColorAttachment.storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+    msaaColorAttachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+    msaaColorAttachment.finalLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
 
-    VkAttachmentReference colorRef{};
-    colorRef.attachment = 0;
-    colorRef.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+    // 1: Resolve HDR
+    VkAttachmentDescription resolveColorAttachment{};
+    resolveColorAttachment.format = m_OffscreenFormat;
+    resolveColorAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
+    resolveColorAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+    resolveColorAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+    resolveColorAttachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+    resolveColorAttachment.finalLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 
+    // 2: Depth
     VkAttachmentDescription depthAttachment{};
     depthAttachment.format = m_DepthFormat;
     depthAttachment.samples = m_MSAASamples;
     depthAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
     depthAttachment.storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-    depthAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-    depthAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
     depthAttachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
     depthAttachment.finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
 
-    VkAttachmentReference depthRef{};
-    depthRef.attachment = 1;
-    depthRef.layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+    // 3: Swapchain Color
+    VkAttachmentDescription swapchainAttachment{};
+    swapchainAttachment.format = m_SwapchainFormat;
+    swapchainAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
+    swapchainAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+    swapchainAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+    swapchainAttachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+    swapchainAttachment.finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
 
-    VkAttachmentDescription resolveAttachment{};
-    resolveAttachment.format = m_SwapchainFormat;
-    resolveAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
-    resolveAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-    resolveAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
-    resolveAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-    resolveAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-    resolveAttachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-    resolveAttachment.finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+    VkAttachmentReference msaaColorRef{0, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL};
+    VkAttachmentReference resolveColorRef{1, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL};
+    VkAttachmentReference depthRef{2, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL};
+    VkAttachmentReference swapchainRef{3, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL};
+    VkAttachmentReference inputColorRef{1, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
 
-    VkAttachmentReference resolveRef{};
-    resolveRef.attachment = 2;
-    resolveRef.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+    // Subpass 0: Geometry
+    VkSubpassDescription subpasses[2]{};
+    subpasses[0].pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
+    subpasses[0].colorAttachmentCount = 1;
+    subpasses[0].pColorAttachments = &msaaColorRef;
+    subpasses[0].pResolveAttachments = &resolveColorRef;
+    subpasses[0].pDepthStencilAttachment = &depthRef;
 
-    VkSubpassDescription subpass{};
-    subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
-    subpass.colorAttachmentCount = 1;
-    subpass.pColorAttachments = &colorRef;
-    subpass.pResolveAttachments = &resolveRef;
-    subpass.pDepthStencilAttachment = &depthRef;
+    // Subpass 1: Post-Process
+    subpasses[1].pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
+    subpasses[1].colorAttachmentCount = 1;
+    subpasses[1].pColorAttachments = &swapchainRef;
+    subpasses[1].inputAttachmentCount = 1;
+    subpasses[1].pInputAttachments = &inputColorRef;
 
-    VkSubpassDependency dependencies[2]{};
+    VkSubpassDependency dependencies[3]{};
     dependencies[0].srcSubpass = VK_SUBPASS_EXTERNAL;
     dependencies[0].dstSubpass = 0;
-    dependencies[0].srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT |
-                                   VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
-    dependencies[0].srcAccessMask = 0;
-    dependencies[0].dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT |
-                                   VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
-    dependencies[0].dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT |
-                                    VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
-    dependencies[1].srcSubpass = 0;
-    dependencies[1].dstSubpass = VK_SUBPASS_EXTERNAL;
-    dependencies[1].srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-    dependencies[1].srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
-    dependencies[1].dstStageMask = VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT;
-    dependencies[1].dstAccessMask = 0;
+    dependencies[0].srcStageMask = VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT;
+    dependencies[0].dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+    dependencies[0].srcAccessMask = VK_ACCESS_MEMORY_READ_BIT;
+    dependencies[0].dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+    dependencies[0].dependencyFlags = VK_DEPENDENCY_BY_REGION_BIT;
 
-    const VkAttachmentDescription attachments[] = {colorAttachment, depthAttachment,
-                                                   resolveAttachment};
+    dependencies[1].srcSubpass = 0;
+    dependencies[1].dstSubpass = 1;
+    dependencies[1].srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+    dependencies[1].dstStageMask = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+    dependencies[1].srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+    dependencies[1].dstAccessMask = VK_ACCESS_INPUT_ATTACHMENT_READ_BIT;
+    dependencies[1].dependencyFlags = VK_DEPENDENCY_BY_REGION_BIT;
+
+    dependencies[2].srcSubpass = 1;
+    dependencies[2].dstSubpass = VK_SUBPASS_EXTERNAL;
+    dependencies[2].srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+    dependencies[2].dstStageMask = VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT;
+    dependencies[2].srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+    dependencies[2].dstAccessMask = VK_ACCESS_MEMORY_READ_BIT;
+    dependencies[2].dependencyFlags = VK_DEPENDENCY_BY_REGION_BIT;
+
+    const VkAttachmentDescription attachments[] = {msaaColorAttachment, resolveColorAttachment,
+                                                   depthAttachment, swapchainAttachment};
 
     VkRenderPassCreateInfo createInfo{};
     createInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
-    createInfo.attachmentCount = 3;
+    createInfo.attachmentCount = 4;
     createInfo.pAttachments = attachments;
-    createInfo.subpassCount = 1;
-    createInfo.pSubpasses = &subpass;
-    createInfo.dependencyCount = 2;
+    createInfo.subpassCount = 2;
+    createInfo.pSubpasses = subpasses;
+    createInfo.dependencyCount = 3;
     createInfo.pDependencies = dependencies;
 
     VK_CHECK(vkCreateRenderPass(m_Device, &createInfo, nullptr, &m_RenderPass));
@@ -1049,13 +1183,13 @@ void Renderer::CreateFramebuffers()
 
     for (size_t i = 0; i < m_SwapchainImageViews.size(); ++i)
     {
-        const VkImageView attachments[] = {m_MSAAColorView, m_DepthImageView,
+        const VkImageView attachments[] = {m_MSAAColorView, m_OffscreenView, m_DepthImageView,
                                            m_SwapchainImageViews[i]};
 
         VkFramebufferCreateInfo createInfo{};
         createInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
         createInfo.renderPass = m_RenderPass;
-        createInfo.attachmentCount = 3;
+        createInfo.attachmentCount = 4;
         createInfo.pAttachments = attachments;
         createInfo.width = m_SwapchainExtent.width;
         createInfo.height = m_SwapchainExtent.height;
@@ -1132,7 +1266,7 @@ void Renderer::CleanupSwapchain()
     CleanupMSAAResources();
 }
 
-void Renderer::Draw()
+void Renderer::Draw(float totalTime)
 {
     Frame& frame = m_Frames[m_FrameIndex];
 
@@ -1142,6 +1276,7 @@ void Renderer::Draw()
     m_Pipeline->ReloadIfChanged();
     m_ShadowPass->ReloadIfChanged();
     m_SkyboxPass->ReloadIfChanged();
+    m_PostProcess->ReloadIfChanged();
 
     u32 imageIndex = 0;
     VkResult acquireResult = vkAcquireNextImageKHR(m_Device, m_Swapchain, UINT64_MAX,
@@ -1153,7 +1288,17 @@ void Renderer::Draw()
     }
     VK_CHECK(acquireResult);
 
-    const CameraUBO ubo{m_View, m_Projection, m_LightVP};
+    // Calculate dynamic sun direction (rotation over time)
+    const float sunSpeed = 0.1f;
+    const glm::vec3 sunDir = glm::normalize(glm::vec3(
+        std::cos(totalTime * sunSpeed),
+        std::abs(std::sin(totalTime * sunSpeed * 0.5f)) + 0.2f, // Stay above horizon
+        std::sin(totalTime * sunSpeed)
+    ));
+
+    const CameraUBO ubo{m_View, m_Projection, m_LightVP,
+                        glm::vec4(glm::vec3(glm::inverse(m_View)[3]), 1.0f),
+                        glm::vec4(sunDir, 0.0f)};
     std::memcpy(frame.uboMapped, &ubo, sizeof(ubo));
 
     const u32 instanceCount = std::min(m_InstanceCount, kMaxInstances);
@@ -1181,22 +1326,24 @@ void Renderer::Draw()
                          VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0, 1, &shadowBarrier, 0, nullptr,
                          0, nullptr);
 
-    VkClearValue clearValues[2]{};
+    VkClearValue clearValues[4]{};
     clearValues[0].color = {{m_ClearColor.r, m_ClearColor.g, m_ClearColor.b, 1.0f}};
-    clearValues[1].depthStencil = {1.0f, 0};
+    clearValues[1].color = {{0.0f, 0.0f, 0.0f, 1.0f}};
+    clearValues[2].depthStencil = {1.0f, 0};
+    clearValues[3].color = {{0.0f, 0.0f, 0.0f, 1.0f}};
 
     VkRenderPassBeginInfo renderPassInfo{};
     renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
     renderPassInfo.renderPass = m_RenderPass;
     renderPassInfo.framebuffer = m_Framebuffers[imageIndex];
     renderPassInfo.renderArea.extent = m_SwapchainExtent;
-    renderPassInfo.clearValueCount = 2;
+    renderPassInfo.clearValueCount = 4;
     renderPassInfo.pClearValues = clearValues;
 
     vkCmdBeginRenderPass(frame.commandBuffer, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
 
     m_SkyboxPass->Render(frame.commandBuffer, m_SwapchainExtent,
-                         glm::inverse(m_Projection * m_View));
+                         glm::inverse(m_Projection * m_View), glm::vec3(ubo.sunDir));
 
     vkCmdBindPipeline(frame.commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_Pipeline->GetHandle());
     const VkDescriptorSet sets[] = {frame.descriptorSet, frame.shadowDescriptorSet};
@@ -1212,8 +1359,12 @@ void Renderer::Draw()
     for (const DrawItem& item : m_DrawItems)
     {
         vkCmdDrawIndexed(frame.commandBuffer, item.indexCount, item.instanceCount, item.firstIndex,
-                         0, item.firstInstance);
+                         item.vertexOffset, item.firstInstance);
     }
+
+    // --- Subpass 1: Post-Process ---
+    vkCmdNextSubpass(frame.commandBuffer, VK_SUBPASS_CONTENTS_INLINE);
+    m_PostProcess->Render(frame.commandBuffer, m_SwapchainExtent);
 
     vkCmdEndRenderPass(frame.commandBuffer);
 

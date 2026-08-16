@@ -9,27 +9,27 @@
 
 - [ ] **1.1** Système de Logs (spdlog/quill) — `Logger.h/.cpp` — **2j**
 - [ ] **1.2** Allocateurs Mémoire Custom (Arena/Pool/Stack) — `MemoryArena.h`, `PoolAllocator.h`, `StackAllocator.h` — **3j**
-- [ ] **1.3** Types Fondamentaux & UUID — `Types.h`, `UUID.h/.cpp`, `Handle.h` — **1j**
-- [ ] **1.4** Bibliothèque Mathématique SIMD (Vec2/3/4, Mat4, Quat, Ray, Frustum) — `Math.h`, `Vector.h`, `Matrix.h`, `Quaternion.h`, `Ray.h`, `Frustum.h` — **2j**
-- [ ] **1.5** ECS Core — Registre d'Entités (EnTT, Registry, Views, Components) — `Registry.h`, `Entity.h`, `Component.h` — **4j**
-- [ ] **1.6** Scheduler de Systèmes (ordre d'exécution, task queue) — `SystemScheduler.h/.cpp`, `SystemGroup.h` — **3j**
-- [ ] **1.8** Timer & Delta Time (haute précision, fixed/variable timestep) — `Timer.h/.cpp`, `FrameTimer.h`, `FixedTimestep.h` — **1j**
-- [ ] **1.9** Game Loop Principale Multi-threadée (3 threads, Double Buffer, 11ms budget) — `Engine.h/.cpp`, `MainLoop.h`, `ThreadPool.h`, `DoubleBuffer.h` — **5j**
+- [x] **1.3** Types Fondamentaux & UUID — `Types.h`, `UUID.h/.cpp`, `Handle.h` — **1j**
+- [x] **1.4** Bibliothèque Mathématique SIMD (Vec2/3/4, Mat4, Quat, Ray, Frustum) — `Math.h`, `Vector.h`, `Matrix.h`, `Quaternion.h`, `Ray.h`, `Frustum.h` — **2j**
+- [x] **1.5** ECS Core — Registre d'Entités (EnTT, Registry, Views, Components) — `Registry.h`, `Entity.h`, `Component.h` — **4j**
+- [x] **1.6** Scheduler de Systèmes (ordre d'exécution, task queue) — `SystemScheduler.h/.cpp`, `SystemGroup.h` — **3j**
+- [x] **1.8** Timer & Delta Time (haute précision, fixed/variable timestep) — `Timer.h/.cpp`, `FrameTimer.h`, `FixedTimestep.h` — **1j**
+- [x] **1.9** Game Loop Principale Multi-threadée (3 threads, Double Buffer, 11ms budget) — `Engine.h/.cpp`, `MainLoop.h`, `ThreadPool.h`, `DoubleBuffer.h` — **5j**
 
 ## MODULE 02 — Platform & Windowing (Phase 1)
 
-- [ ] **2.1** Abstraction OS (HAL) — `Platform.h`, `WindowsPlatform.cpp`, `LinuxPlatform.cpp` — **2j**
-- [ ] **2.2** Gestion Fenêtre GLFW (VkSurface, mirror VR) — `Window.h/.cpp`, `WindowEvents.h` — **2j**
+- [x] **2.1** Abstraction OS (HAL) — `Platform.h`, `WindowsPlatform.cpp`, `LinuxPlatform.cpp` — **2j**
+- [x] **2.2** Gestion Fenêtre GLFW (VkSurface, mirror VR) — `Window.h/.cpp`, `WindowEvents.h` — **2j**
 
 ## MODULE 03 — Renderer Vulkan (Phase 2)
 
-- [ ] **3.1** Init Vulkan — Instance & Device (VkInstance, VkDevice, queues, layers, multiview) — `VulkanContext.h/.cpp`, `VulkanDevice.h` — **4j**
-- [ ] **3.2** Swapchain & Surface (double buffering, swapchains stéréo gauche/droite) — `Swapchain.h/.cpp`, `VulkanSurface.h`, `XRSwapchain.h` — **3j**
-- [ ] **3.3** Pipeline Graphique & Shaders (GLSL → SPIR-V, hot-reload) — `Pipeline.h/.cpp`, `Shader.h/.cpp`, `ShaderCompiler.h` — **5j**
-- [ ] **3.4** Render Pass & Framebuffers (Main Pass, Resolve Pass, MSAA) — `RenderPass.h/.cpp`, `Framebuffer.h`, `RenderGraph.h` — **3j**
+- [x] **3.1** Init Vulkan — Instance & Device (VkInstance, VkDevice, queues, layers, multiview) — `VulkanContext.h/.cpp`, `VulkanDevice.h` — **4j**
+- [x] **3.2** Swapchain & Surface (double buffering, swapchains stéréo gauche/droite) — `Swapchain.h/.cpp`, `VulkanSurface.h`, `XRSwapchain.h` — **3j**
+- [x] **3.3** Pipeline Graphique & Shaders (GLSL → SPIR-V, hot-reload) — `Pipeline.h/.cpp`, `Shader.h/.cpp`, `ShaderCompiler.h` — **5j**
+- [x] **3.4** Render Pass & Framebuffers (Main Pass, Resolve Pass, MSAA) — `RenderPass.h/.cpp`, `Framebuffer.h`, `RenderGraph.h` — **3j**
 - [ ] **3.5** Gestion Mémoire GPU (VMA) — `GPUAllocator.h/.cpp`, `VulkanBuffer.h`, `VulkanImage.h` — **2j**
 - [ ] **3.12** Stereo VR Rendering — Double Passe (Single-Pass Instanced, VK_KHR_multiview) — `StereoRenderer.h/.cpp`, `EyeMatrices.h`, `StereoFramebuffer.h` — **5j**
-- [ ] **3.13** Foveated Rendering Dynamique (rendu fovéal, économie GPU 50-70%) — `FoveatedPass.h/.cpp`, `FoveationMap.h` — **6j**
+- [x] **3.13** Foveated Rendering Dynamique (rendu fovéal, économie GPU 50-70%) — `FoveatedPass.h/.cpp`, `FoveationMap.h` — **6j**
 
 ## MODULE 04 — VR & Eye-Tracking (Phase 2)
 
@@ -43,8 +43,8 @@
 
 ## MODULE 05 — Physics (Phase 2)
 
-- [ ] **5.1** Init Monde Physique Jolt (JobSystem multi-threadé, layers) — `PhysicsWorld.h/.cpp`, `PhysicsLayers.h`, `JoltJobSystem.h` — **3j**
-- [ ] **5.2** Rigid Bodies (Box, Capsule, Sphere, Mesh + PhysicsBodyComponent ECS) — `RigidBody.h/.cpp`, `CollisionShape.h`, `PhysicsBodyComponent.h` — **3j**
+- [x] **5.1** Init Monde Physique Jolt (JobSystem multi-threadé, layers) — `PhysicsWorld.h/.cpp`, `PhysicsLayers.h`, `JoltJobSystem.h` — **3j**
+- [x] **5.2** Rigid Bodies (Box, Capsule, Sphere, Mesh + PhysicsBodyComponent ECS) — `RigidBody.h/.cpp`, `CollisionShape.h`, `PhysicsBodyComponent.h` — **3j**
 
 ## MODULE 06 — Audio 3D (Phase 3)
 

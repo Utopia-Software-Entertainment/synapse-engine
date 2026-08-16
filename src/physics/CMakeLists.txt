@@ -1,9 +1,11 @@
 add_library(synapse_physics
     Jolt/PhysicsWorld.cpp
     Jolt/RigidBody.cpp
+    Jolt/PlayerCharacter.cpp
     Jolt/CollisionShape.cpp
     Jolt/CollisionSystem.cpp
     Jolt/PhysicsQuery.cpp
+    Jolt/PhysicsSystem.cpp
     IK/BodyIKSolver.cpp
     IK/FABRIKSolver.cpp
     Navigation/NavMesh.cpp

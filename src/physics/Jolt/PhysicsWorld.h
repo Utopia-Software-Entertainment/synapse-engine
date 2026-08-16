@@ -2,6 +2,7 @@
 
 #include <core/Types.h>
 
+#include <glm/glm.hpp>
 #include <memory>
 
 namespace JPH {
@@ -37,6 +38,8 @@ public:
 
     JPH::BodyInterface& GetBodyInterface();
     JPH::PhysicsSystem& GetPhysicsSystem();
+    JPH::TempAllocator& GetTempAllocator();
+    glm::vec3 GetGravity() const;
 
 private:
     // Ordre de destruction important : PhysicsSystem (déclaré en dernier) doit

@@ -13,13 +13,15 @@ Pipeline::Pipeline(VkDevice device, VkRenderPass renderPass, VkExtent2D extent,
                    std::string_view vertShader, std::string_view fragShader,
                    u32 pushConstantSize, std::string_view vertSourcePath,
                    std::string_view fragSourcePath,
-                   VkSampleCountFlagBits sampleCount)
+                   VkSampleCountFlagBits sampleCount,
+                   u32 subpass)
     : m_Device(device),
       m_RenderPass(renderPass),
       m_Extent(extent),
       m_SetLayouts(setLayouts, setLayouts + setLayoutCount),
       m_PushConstantSize(pushConstantSize),
       m_SampleCount(sampleCount),
+      m_Subpass(subpass),
       m_VertSourcePath(vertSourcePath),
       m_FragSourcePath(fragSourcePath)
 {
@@ -221,10 +223,12 @@ VkPipeline Pipeline::BuildGraphicsPipeline(VkShaderModule vertModule, VkShaderMo
     multisampling.sampleShadingEnable = VK_FALSE;
     multisampling.rasterizationSamples = m_SampleCount;
 
+    SYNAPSE_CORE_INFO("Building pipeline: samples={}, subpass={}", static_cast<u32>(m_SampleCount), m_Subpass);
+
     VkPipelineDepthStencilStateCreateInfo depthStencil{};
     depthStencil.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
-    depthStencil.depthTestEnable = VK_TRUE;
-    depthStencil.depthWriteEnable = VK_TRUE;
+    depthStencil.depthTestEnable = (m_Subpass == 0) ? VK_TRUE : VK_FALSE;
+    depthStencil.depthWriteEnable = (m_Subpass == 0) ? VK_TRUE : VK_FALSE;
     depthStencil.depthCompareOp = VK_COMPARE_OP_LESS;
     depthStencil.depthBoundsTestEnable = VK_FALSE;
     depthStencil.stencilTestEnable = VK_FALSE;
@@ -273,7 +277,7 @@ VkPipeline Pipeline::BuildGraphicsPipeline(VkShaderModule vertModule, VkShaderMo
     createInfo.pColorBlendState = &colorBlending;
     createInfo.layout = m_Layout;
     createInfo.renderPass = m_RenderPass;
-    createInfo.subpass = 0;
+    createInfo.subpass = m_Subpass;
 
     VkPipeline pipeline = VK_NULL_HANDLE;
     if (vkCreateGraphicsPipelines(m_Device, VK_NULL_HANDLE, 1, &createInfo, nullptr, &pipeline) !=

@@ -1,8 +1,10 @@
 add_library(synapse_voice
     Whisper/VoiceRecognizer.cpp
     Whisper/WhisperContext.cpp
-    Whisper/STTPipeline.cpp
     Whisper/MicCapture.cpp
+    STT/STTPipeline.cpp
+    STT/WhisperBackend.cpp
+    STT/CrisperWhisperBackend.cpp
     Intent/IntentParser.cpp
     Intent/CommandMatcher.cpp
 )

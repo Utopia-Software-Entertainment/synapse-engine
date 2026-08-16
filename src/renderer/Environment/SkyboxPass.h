@@ -29,7 +29,7 @@ public:
     bool ReloadIfChanged();
 
     void Render(VkCommandBuffer commandBuffer, VkExtent2D extent,
-                const glm::mat4& invViewProj);
+                const glm::mat4& invViewProj, const glm::vec3& sunDir);
 
 private:
     void CreateCubeMap();

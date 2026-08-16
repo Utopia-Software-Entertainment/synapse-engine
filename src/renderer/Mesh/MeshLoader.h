@@ -10,6 +10,7 @@ class MeshLoader
 {
 public:
     static Mesh LoadObj(std::string_view filepath);
+    static Mesh LoadGltf(std::string_view filepath);
 };
 
 } // namespace synapse

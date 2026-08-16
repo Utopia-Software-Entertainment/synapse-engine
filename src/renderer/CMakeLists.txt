@@ -51,6 +51,8 @@ set(SHADER_LIST
     shadow.vert
     skybox.vert
     skybox.frag
+    postprocess.vert
+    postprocess.frag
 )
 
 set(SHADER_OUTPUTS "")

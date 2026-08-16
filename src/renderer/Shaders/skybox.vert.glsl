@@ -1,7 +1,8 @@
 #version 450
 
-layout(push_constant) uniform InvViewProj {
+layout(push_constant) uniform SkyboxPush {
     mat4 invViewProj;
+    vec4 sunDir;
 } push;
 
 layout(location = 0) out vec3 localPos;

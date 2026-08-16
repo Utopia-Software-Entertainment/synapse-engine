@@ -1,0 +1,143 @@
+{
+  "version": 1,
+  "updated_on": "2026-08-15",
+  "source_video": {
+    "title": "L'IA vient de devenir gratuite (et personne n'en parle)",
+    "url": "https://youtu.be/Pht0jC4mg40",
+    "channel": "Vision IA"
+  },
+  "note": "Registre d'intégration des outils open-source vus dans la vidéo, calibré sur config/hardware.json (RTX 4060 8 Go, 14 Go RAM). Modifiez les flags/paths ici, puis relancez scripts/tools/setup_ai_toolchain.sh. Les outils marqués 'runtime' sont du code C++ dans le moteur ; 'tooling' sont des scripts/hors-moteur.",
+
+  "tools": [
+    {
+      "id": "crisper_whisper2",
+      "video_timestamps": ["17:04", "17:46", "18:05"],
+      "category": "runtime",
+      "engine_module": "src/voice/",
+      "status": "active",
+      "description": "STT verbatim (cris, murmures, hésitations) + timestamps mot-à-mot ~30ms. Validation des incantations vocales ('Boule de feu').",
+      "backends": {
+        "whisper_cpp": {
+          "status": "active",
+          "primary": false,
+          "model_path": "assets/models/whisper/ggml-small.bin",
+          "note": "Backend production (poids OpenAI Whisper MIT/Apache). Repli si CrisperWhisper indisponible. Déjà intégré au build (whisper.cpp v1.7.1, MIT). Fournit timestamps token-level via whisper_full_get_token_data."
+        },
+        "crisperwhisper_cpp": {
+          "status": "active",
+          "primary": true,
+          "repo": "https://github.com/Saganaki22/CrisperWhisper.cpp",
+          "cli_path": "third_party/CrisperWhisper.cpp/build/bin/crisper-whisper",
+          "build_script": "scripts/tools/build_crisper_cli.sh",
+          "model": {
+            "source": "drbaph/CrisperWhisper2.0-GGML",
+            "file": "ggml-crisperwhisper-small-f16.bin",
+            "path": "assets/models/crisper/ggml-crisperwhisper-small-f16.bin"
+          },
+          "license": "CODE MIT / POIDS CC-BY-NC-4.0 (non-commercial)",
+          "license_detail": "Les poids CrisperWhisper 2.0 (nyralabs) sont sous Non-Commercial Research License (CC-BY-NC-4.0). Principal pour les TESTS / prototypage du gameplay — pas dans le build commercial. Backend prod = whisper_cpp (poids OpenAI Whisper, MIT)."
+        }
+      },
+      "feasibility": {
+        "rating": "excellent",
+        "reason": "200M-2B params, <500 Mo-3 Go. Tourne sur CPU (Ryzen 7, 16 threads) sans toucher la VRAM → ne dégrade pas le rendu VR 90 FPS.",
+        "recommended_model": "ggml-small.bin (multilingue, ~466 Mo) pour le FR + verbatim",
+        "model_path": "assets/models/whisper/ggml-small.bin"
+      },
+      "enable": true,
+      "language": "fr",
+      "latency_budget_ms": 250,
+      "primary_backend": "crisperwhisper_cpp"
+    },
+
+    {
+      "id": "wan_animate2",
+      "video_timestamps": ["04:18", "04:31", "05:24"],
+      "category": "tooling",
+      "engine_module": "assets/animations/ (clips consommés par src/physics/IK + animation)",
+      "status": "planned",
+      "description": "MoCap virtuel : photo + vidéo webcam → animations transférées (boss Lycaon, Wethermon, proportions non humaines).",
+      "feasibility": {
+        "rating": "limité",
+        "reason": "Modèle complet ~33 Go, INT8 ~16 Go : trop gros pour 8 Go VRAM / 59 Go disque. Wan 2 Lite (<1s) sur GPU milieu de gamme envisageable en offline.",
+        "recommended_config": "Wan 2 Lite via ComfyUI (INT8 si possible) ou service cloud ponctuel ; sinon générer les banques d'animations sur une machine plus grosse.",
+        "comfyui_workflow": "scripts/tools/run_wan_animate.sh"
+      },
+      "enable": false,
+      "output_format": "SkeletalAnimationClip (glTF/GLB + courbes) — à définir côté moteur"
+    },
+
+    {
+      "id": "minimax_h3",
+      "video_timestamps": ["01:16", "02:20", "03:51"],
+      "category": "tooling",
+      "engine_module": "assets/textures/, docs/prototypes/ (génération de gameplay de référence)",
+      "status": "planned",
+      "description": "World model vidéo+audio natif synchrone. Prototyper la physique du monde, générer du gameplay visuel de référence, textures/biomes dynamiques.",
+      "feasibility": {
+        "rating": "limité",
+        "reason": "22B/33B params, 5-16 Go VRAM : seule la 22B très quantifiée peut tenir dans 8 Go, lentement. Usage 'occasional prototyping' uniquement, pas en runtime.",
+        "recommended_config": "MiniMax-H3 22B (quantification agressive) en offline, sinon machine dédiée.",
+        "runner": "scripts/tools/run_minimax_h3.sh"
+      },
+      "enable": false
+    },
+
+    {
+      "id": "tiered_ecs_gemini",
+      "video_timestamps": ["12:05", "12:52"],
+      "category": "runtime",
+      "engine_module": "src/core/Scheduler/TieredScheduler.h",
+      "status": "active",
+      "description": "Découpe hiérarchique 3 niveaux inspirée de Gemini Robotics 2 : Réflexe (synchrone 90Hz : eye-tracking, EMG, input) / Action (60Hz) / Cerveau (async taskflow : IA PNJ, dialogues).",
+      "feasibility": {
+        "rating": "excellent",
+        "reason": "100% CPU multi-thread (16 threads), aucun coût VRAM. Résout les saccades VR dues aux IA bloquantes."
+      },
+      "enable": true,
+      "reflex_hz": 90,
+      "action_hz": 60,
+      "brain_threads": 6
+    },
+
+    {
+      "id": "qwen38_local",
+      "video_timestamps": ["06:40", "07:43"],
+      "category": "tooling",
+      "engine_module": "outil de dev (OpenCode/Cursor) — PAS un composant runtime",
+      "status": "optional",
+      "description": "Agent de codage local (Qwen3.8-27B, Apache-2.0, weights publiés 14-15 août 2026). Accélère bindings C++, boilerplate Vulkan/OpenXR/ECS.",
+      "feasibility": {
+        "rating": "faible sur ce PC",
+        "reason": "Q4_K_M = 17,1 Go (24 Go VRAM recommandés) : IMPOSSIBLE sur 8 Go. Q2_K/Q3 (~9,9-12,4 Go) débordent aussi la VRAM → offload CPU dans 14 Go RAM = très lent. Recommandation honnête : utiliser un Qwen plus petit (7B/8B) en local, ou le 27B en Q2 sur cette machine en mode batch uniquement.",
+        "recommended_config": "Qwen3.8-8B Q4_K_M (~5 Go) via llama.cpp/ollama pour l'édition ; 27B réservé à une machine 24 Go+ ou usage cloud occasionnel."
+      },
+      "enable": false,
+      "llama_server_port": 8080,
+      "gguf_path": "models/qwen3.8/Qwen3.8-8B-Q4_K_M.gguf"
+    }
+  ],
+
+  "runtime_integration": {
+    "voice_spell_system": {
+      "source": "crisper_whisper2",
+      "flow": "MicCapture 16kHz mono -> STTPipeline (backend whisper_cpp, verbatim, token timestamps) -> IntentParser/CommandMatcher -> EventBus -> système de sorts",
+      "config_file": "config/ai_toolchain.json > tools[0]"
+    },
+    "vr_reflex_loop": {
+      "source": "tiered_ecs_gemini",
+      "flow": "TieredScheduler.Reflex (90Hz, thread principal avant render) : EyeTracker, EMG blink/jaw, InputManager, GazeRaycast. Brain : IA PNJ, dialogues, pathfinding (taskflow).",
+      "config_file": "config/ai_toolchain.json > tools[3]"
+    }
+  },
+
+  "license_compliance": [
+    { "tool": "CrisperWhisper 2.0 (poids nyralabs)", "license": "Non-Commercial Research", "usable_in_game": "NON", "alternative": "whisper.cpp + OpenAI Whisper (MIT/Apache) pour la prod" },
+    { "tool": "CrisperWhisper.cpp (code)", "license": "MIT", "usable_in_game": "OUI (le code), mais poids non-commerciaux" },
+    { "tool": "whisper.cpp (ggerganov)", "license": "MIT", "usable_in_game": "OUI" },
+    { "tool": "OpenAI Whisper (poids)", "license": "MIT", "usable_in_game": "OUI" },
+    { "tool": "Qwen3.8-27B", "license": "Apache-2.0", "usable_in_game": "OUI (dev tool)" },
+    { "tool": "MiniMax H3", "license": "à vérifier (Apache-2.0 annoncé)", "usable_in_game": "tooling seulement", "note": "Vérifier la licence exacte avant usage commercial" },
+    { "tool": "Wan Animate 2", "license": "à vérifier (Apache-2.0 annoncé)", "usable_in_game": "tooling seulement", "note": "Vérifier la licence exacte avant usage commercial" }
+  ]
+}

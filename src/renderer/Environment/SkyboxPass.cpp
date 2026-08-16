@@ -23,7 +23,7 @@ namespace {
         const VkResult result = (expr);                                         \
         if (result != VK_SUCCESS)                                               \
         {                                                                       \
-            SYNAPSE_CORE_CRITICAL("SkyboxPass: Vulkan error 0x{:x} at {}:{}",  \
+            SYNAPSE_CORE_CRITICAL("SkyboxPass: Vulkan error 0x{:x} at {}:{}",   \
                                   static_cast<u32>(result), __FILE__, __LINE__);\
             std::abort();                                                       \
         }                                                                       \
@@ -440,9 +440,9 @@ void SkyboxPass::CreatePipeline(std::string_view vertSpirv, std::string_view fra
     colorBlending.pAttachments = &blendAttachment;
 
     VkPushConstantRange pushConstantRange{};
-    pushConstantRange.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+    pushConstantRange.stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT;
     pushConstantRange.offset = 0;
-    pushConstantRange.size = sizeof(glm::mat4);
+    pushConstantRange.size = sizeof(glm::mat4) + sizeof(glm::vec4);
 
     if (m_PipelineLayout == VK_NULL_HANDLE)
     {
@@ -493,7 +493,7 @@ void SkyboxPass::CreatePipeline(std::string_view vertSpirv, std::string_view fra
 }
 
 void SkyboxPass::Render(VkCommandBuffer commandBuffer, VkExtent2D extent,
-                        const glm::mat4& invViewProj)
+                        const glm::mat4& invViewProj, const glm::vec3& sunDir)
 {
     VkViewport viewport{};
     viewport.width = static_cast<float>(extent.width);
@@ -509,8 +509,17 @@ void SkyboxPass::Render(VkCommandBuffer commandBuffer, VkExtent2D extent,
     vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_Pipeline);
     vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_PipelineLayout, 0, 1,
                             &m_Set, 0, nullptr);
-    vkCmdPushConstants(commandBuffer, m_PipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0,
-                       sizeof(invViewProj), &invViewProj);
+
+    struct SkyboxPush {
+        glm::mat4 invViewProj;
+        glm::vec4 sunDir;
+    } push;
+    push.invViewProj = invViewProj;
+    push.sunDir = glm::vec4(sunDir, 0.0f);
+
+    vkCmdPushConstants(commandBuffer, m_PipelineLayout,
+                       VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0,
+                       sizeof(push), &push);
     vkCmdDraw(commandBuffer, 3, 1, 0, 0);
 }
 

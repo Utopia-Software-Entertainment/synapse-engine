@@ -1,7 +1,13 @@
 #include <core/Engine.h>
 #include <core/Types.h>
+#include <core/ECS/Components/TransformComponent.h>
+#include <core/ECS/Components/MeshComponent.h>
+#include <core/Scene.h>
 #include <physics/Jolt/PhysicsWorld.h>
 #include <physics/Jolt/RigidBody.h>
+#include <physics/Jolt/PlayerCharacter.h>
+#include <physics/Jolt/PhysicsQuery.h>
+#include <physics/Jolt/PhysicsSystem.h>
 #include <platform/Window.h>
 #include <renderer/Camera/Camera.h>
 #include <renderer/Mesh/Mesh.h>
@@ -15,7 +21,9 @@
 
 #include <array>
 #include <chrono>
+#include <cstdio>
 #include <cmath>
+#include <thread>
 #include <vector>
 
 int main()
@@ -24,95 +32,52 @@ int main()
     synapse::Window window("Synapse Engine", 1280, 720);
     synapse::Renderer renderer(window, 1280, 720);
 
-    synapse::Camera camera(60.0f, 1280.0f / 720.0f, 0.1f, 100.0f);
-    camera.SetPosition(glm::vec3(0.0f, 0.0f, 3.0f));
+    // --- Start Engine ---
+    engine.Start(renderer);
+    auto& scene = engine.GetScene();
+    auto& world = engine.GetPhysicsWorld(); // CRITICAL: Use Engine's world
 
-    synapse::Mesh cube = synapse::CreateCube();
-    synapse::Mesh floor = synapse::CreateFloor();
-    synapse::Mesh sphere = synapse::MeshLoader::LoadObj("assets/models/sphere.obj");
+    synapse::Camera camera(60.0f, 1280.0f / 720.0f, 0.1f, 2000.0f);
+    camera.SetPosition(glm::vec3(0.0f, 2.0f, -10.0f));
+    camera.Rotate(180.0f, 0.0f);
 
-    synapse::Mesh scene;
-    scene.vertices = cube.vertices;
-    scene.vertices.insert(scene.vertices.end(), floor.vertices.begin(), floor.vertices.end());
-    scene.vertices.insert(scene.vertices.end(), sphere.vertices.begin(), sphere.vertices.end());
+    // --- Create a "City" of Monuments (Buildings) ---
+    // A dense grid to simulate a plaza/city
+    for (int x = -3; x <= 3; ++x) {
+        for (int z = -3; z <= 3; ++z) {
+            if (x == 0 && z == 0) continue; // Leave center for player
+            float posX = x * 40.0f;
+            float posZ = z * 40.0f;
 
-    constexpr uint32_t kCubeVertexOffset = 0;
-    const uint32_t kFloorVertexOffset = static_cast<uint32_t>(cube.vertices.size());
-    const uint32_t kSphereVertexOffset = kFloorVertexOffset + static_cast<uint32_t>(floor.vertices.size());
-
-    scene.indices = cube.indices;
-    for (uint16_t index : floor.indices)
-    {
-        scene.indices.push_back(index + kFloorVertexOffset);
+            // Load with massive scale, Scene now handles the physical box scale
+            scene.LoadModel(SYNAPSE_ASSET_DIR "/models/damaged_helmet.glb",
+                            glm::vec3(posX, 0.0f, posZ),
+                            glm::vec3(15.0f),
+                            true);
+        }
     }
-    for (uint16_t index : sphere.indices)
-    {
-        scene.indices.push_back(index + kSphereVertexOffset);
-    }
 
-    renderer.SetGeometry(scene);
-
-    constexpr uint32_t kCubeIndexCount = 36;
-    constexpr uint32_t kCubeFirstIndex = 0;
-    const uint32_t kFloorFirstIndex = static_cast<uint32_t>(cube.indices.size());
-    constexpr uint32_t kFloorIndexCount = 6;
-    const uint32_t kSphereFirstIndex = kFloorFirstIndex + kFloorIndexCount;
-    const uint32_t kSphereIndexCount = static_cast<uint32_t>(sphere.indices.size());
-
-    synapse::physics::PhysicsWorld world;
+    // Manual Floor
+    synapse::Mesh floorMesh = synapse::CreateFloor();
+    auto floorRange = renderer.UploadMesh(floorMesh);
 
     synapse::physics::ShapeDesc floorShape;
-    floorShape.halfExtent = glm::vec3(6.0f, 0.5f, 6.0f);
-    synapse::physics::RigidBody floorBody(world, floorShape, glm::vec3(0.0f, -1.5f, 0.0f),
+    floorShape.halfExtent = glm::vec3(1000.0f, 0.5f, 1000.0f);
+    synapse::physics::RigidBody floorBody(world, floorShape, glm::vec3(0.0f, -0.5f, 0.0f),
                                           glm::quat(1.0f, 0.0f, 0.0f, 0.0f),
                                           synapse::physics::MotionType::Static);
 
-    synapse::physics::RigidBody cubeBody(world, synapse::physics::ShapeDesc{},
-                                         glm::vec3(0.0f, 0.5f, 0.0f));
-
-    synapse::physics::ShapeDesc sphereShape;
-    sphereShape.kind = synapse::physics::ShapeKind::Sphere;
-    sphereShape.radius = 0.5f;
-    synapse::physics::RigidBody sphereBody(world, sphereShape, glm::vec3(-1.5f, 2.0f, 0.0f),
-                                           glm::quat(1.0f, 0.0f, 0.0f, 0.0f),
-                                           synapse::physics::MotionType::Dynamic, 0.5f, 0.35f);
-    sphereBody.SetLinearVelocity(glm::vec3(2.2f, 0.0f, 0.0f));
-
-    std::array<synapse::physics::RigidBody, 6> orbitBodies{
-        synapse::physics::RigidBody(world, synapse::physics::ShapeDesc{},
-                                    glm::vec3(std::cos(0.0f) * 2.2f, 2.0f, std::sin(0.0f) * 2.2f)),
-        synapse::physics::RigidBody(world, synapse::physics::ShapeDesc{},
-                                    glm::vec3(std::cos(glm::two_pi<float>() / 6.0f) * 2.2f, 2.5f,
-                                              std::sin(glm::two_pi<float>() / 6.0f) * 2.2f)),
-        synapse::physics::RigidBody(world, synapse::physics::ShapeDesc{},
-                                    glm::vec3(std::cos(2.0f * glm::two_pi<float>() / 6.0f) * 2.2f, 3.0f,
-                                              std::sin(2.0f * glm::two_pi<float>() / 6.0f) * 2.2f)),
-        synapse::physics::RigidBody(world, synapse::physics::ShapeDesc{},
-                                    glm::vec3(std::cos(3.0f * glm::two_pi<float>() / 6.0f) * 2.2f, 3.5f,
-                                              std::sin(3.0f * glm::two_pi<float>() / 6.0f) * 2.2f)),
-        synapse::physics::RigidBody(world, synapse::physics::ShapeDesc{},
-                                    glm::vec3(std::cos(4.0f * glm::two_pi<float>() / 6.0f) * 2.2f, 4.0f,
-                                              std::sin(4.0f * glm::two_pi<float>() / 6.0f) * 2.2f)),
-        synapse::physics::RigidBody(world, synapse::physics::ShapeDesc{},
-                                    glm::vec3(std::cos(5.0f * glm::two_pi<float>() / 6.0f) * 2.2f, 4.5f,
-                                              std::sin(5.0f * glm::two_pi<float>() / 6.0f) * 2.2f)),
-    };
-    for (uint32_t i = 0; i < 6; ++i)
-    {
-        const float angle = static_cast<float>(i) * glm::two_pi<float>() / 6.0f;
-        orbitBodies[i].SetLinearVelocity(
-            glm::vec3(-std::sin(angle) * 1.5f, 0.0f, std::cos(angle) * 1.5f));
-    }
-
-    engine.Start();
+    // Player starts on the ground, sharing the SAME world as buildings
+    synapse::physics::PlayerCharacter player(world, glm::vec3(0.0f, 1.0f, -15.0f));
 
     const glm::vec3 lightDir = glm::normalize(glm::vec3(0.3f, 1.0f, 0.4f));
-    const glm::mat4 lightView = glm::lookAt(-lightDir * 8.0f, glm::vec3(0.0f, 0.0f, 0.0f),
+    const glm::mat4 lightView = glm::lookAt(-lightDir * 100.0f, glm::vec3(0.0f, 0.0f, 0.0f),
                                             glm::vec3(0.0f, 1.0f, 0.0f));
-    const glm::mat4 lightProj = glm::ortho(-8.0f, 8.0f, -8.0f, 8.0f, 0.1f, 30.0f);
+    const glm::mat4 lightProj = glm::ortho(-200.0f, 200.0f, -200.0f, 200.0f, 0.1f, 500.0f);
     const glm::mat4 lightViewProj = lightProj * lightView;
 
-    auto lastTime = std::chrono::steady_clock::now();
+    auto startTime = std::chrono::steady_clock::now();
+    auto lastTime = startTime;
 
     GLFWwindow* handle = window.GetHandle();
     glfwSetInputMode(handle, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
@@ -129,54 +94,11 @@ int main()
     {
         window.PollEvents();
 
+        const float totalTime = std::chrono::duration<float>(
+            std::chrono::steady_clock::now() - startTime).count();
         const float deltaTime = std::chrono::duration<float>(
             std::chrono::steady_clock::now() - lastTime).count();
         lastTime = std::chrono::steady_clock::now();
-
-        const float speed = 3.0f * deltaTime;
-        const float lookSpeed = 30.0f * deltaTime;
-
-        GLFWwindow* handle = window.GetHandle();
-        if (glfwGetKey(handle, GLFW_KEY_W) == GLFW_PRESS)
-        {
-            camera.Move(glm::vec3(0.0f, 0.0f, speed));
-        }
-        if (glfwGetKey(handle, GLFW_KEY_S) == GLFW_PRESS)
-        {
-            camera.Move(glm::vec3(0.0f, 0.0f, -speed));
-        }
-        if (glfwGetKey(handle, GLFW_KEY_A) == GLFW_PRESS)
-        {
-            camera.Move(glm::vec3(-speed, 0.0f, 0.0f));
-        }
-        if (glfwGetKey(handle, GLFW_KEY_D) == GLFW_PRESS)
-        {
-            camera.Move(glm::vec3(speed, 0.0f, 0.0f));
-        }
-        if (glfwGetKey(handle, GLFW_KEY_Q) == GLFW_PRESS)
-        {
-            camera.Move(glm::vec3(0.0f, -speed, 0.0f));
-        }
-        if (glfwGetKey(handle, GLFW_KEY_E) == GLFW_PRESS)
-        {
-            camera.Move(glm::vec3(0.0f, speed, 0.0f));
-        }
-        if (glfwGetKey(handle, GLFW_KEY_LEFT) == GLFW_PRESS)
-        {
-            camera.Rotate(-lookSpeed, 0.0f);
-        }
-        if (glfwGetKey(handle, GLFW_KEY_RIGHT) == GLFW_PRESS)
-        {
-            camera.Rotate(lookSpeed, 0.0f);
-        }
-        if (glfwGetKey(handle, GLFW_KEY_UP) == GLFW_PRESS)
-        {
-            camera.Rotate(0.0f, lookSpeed);
-        }
-        if (glfwGetKey(handle, GLFW_KEY_DOWN) == GLFW_PRESS)
-        {
-            camera.Rotate(0.0f, -lookSpeed);
-        }
 
         double mouseX = 0.0;
         double mouseY = 0.0;
@@ -193,36 +115,57 @@ int main()
         lastMouseX = mouseX;
         lastMouseY = mouseY;
 
+        const float yawRad = glm::radians(camera.GetYaw());
+        const glm::vec3 forward(std::sin(yawRad), 0.0f, -std::cos(yawRad));
+        const glm::vec3 right = glm::normalize(glm::cross(forward, glm::vec3(0.0f, 1.0f, 0.0f)));
+
+        glm::vec3 moveDir(0.0f);
+        if (glfwGetKey(handle, GLFW_KEY_W) == GLFW_PRESS) moveDir += forward;
+        if (glfwGetKey(handle, GLFW_KEY_S) == GLFW_PRESS) moveDir -= forward;
+        if (glfwGetKey(handle, GLFW_KEY_A) == GLFW_PRESS) moveDir -= right;
+        if (glfwGetKey(handle, GLFW_KEY_D) == GLFW_PRESS) moveDir += right;
+        if (glm::length(moveDir) > 0.001f) moveDir = glm::normalize(moveDir);
+
+        const bool jump = glfwGetKey(handle, GLFW_KEY_SPACE) == GLFW_PRESS;
+
+        // --- Step Physics via System (Steps the shared world and synchronizes ECS) ---
+        synapse::physics::PhysicsSystem::Update(std::min(deltaTime, 1.0f / 30.0f), world, engine.GetRegistry());
+
+        // Player manual update (CharacterVirtual)
+        player.Update(std::min(deltaTime, 1.0f / 30.0f), moveDir, jump);
+
+        const glm::vec3 camPos = player.GetPosition() + glm::vec3(0.0f, 1.6f, 0.0f);
+        camera.SetPosition(camPos);
         camera.SetAspectRatio(static_cast<float>(window.GetWidth()) / static_cast<float>(window.GetHeight()));
 
-        world.Step(std::min(deltaTime, 1.0f / 30.0f));
-
+        // --- Prepare Render Data from ECS ---
         std::vector<glm::mat4> transforms;
         std::vector<synapse::DrawItem> items;
-        transforms.reserve(9);
-        items.reserve(4);
 
+        // Add floor
         transforms.push_back(glm::mat4(1.0f));
-        items.push_back({kFloorFirstIndex, kFloorIndexCount, 0, 1});
+        items.push_back({floorRange.firstIndex, floorRange.indexCount, 0, 1, floorRange.vertexOffset});
 
-        transforms.push_back(cubeBody.GetModelMatrix());
-        items.push_back({kCubeFirstIndex, kCubeIndexCount, 1, 1});
-
-        transforms.push_back(sphereBody.GetModelMatrix());
-        items.push_back({kSphereFirstIndex, kSphereIndexCount, 2, 1});
-
-        for (const auto& body : orbitBodies)
+        // Add ECS objects (buildings)
+        auto view = engine.GetRegistry().view<synapse::ecs::TransformComponent, synapse::ecs::MeshComponent>();
+        for (auto entity : view)
         {
-            transforms.push_back(body.GetModelMatrix());
+            auto& t = view.get<synapse::ecs::TransformComponent>(entity);
+            auto& m = view.get<synapse::ecs::MeshComponent>(entity);
+            transforms.push_back(t.LocalMatrix());
+            items.push_back({m.firstIndex, m.indexCount, static_cast<uint32_t>(transforms.size() - 1), 1, static_cast<int32_t>(m.vertexOffset)});
         }
-        items.push_back({kCubeFirstIndex, kCubeIndexCount, 3, 6});
 
         renderer.SetInstanceTransforms(transforms.data(), static_cast<uint32_t>(transforms.size()));
         renderer.SetDrawItems(std::move(items));
         renderer.SetViewProjection(camera.GetViewMatrix(), camera.GetProjectionMatrix());
         renderer.SetLightViewProjection(lightViewProj);
-        renderer.Draw();
+        renderer.Draw(totalTime);
         engine.TickFrame();
+
+        constexpr float kFrameBudget = 1.0f / 60.0f;
+        const float frameTime = std::chrono::duration<float>(std::chrono::steady_clock::now() - lastTime).count();
+        if (frameTime < kFrameBudget) std::this_thread::sleep_for(std::chrono::duration<float>(kFrameBudget - frameTime));
     }
 
     return 0;

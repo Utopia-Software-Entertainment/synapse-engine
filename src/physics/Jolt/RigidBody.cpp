@@ -87,4 +87,15 @@ void RigidBody::SetLinearVelocity(const glm::vec3& velocity)
                                                  JPH::Vec3(velocity.x, velocity.y, velocity.z));
 }
 
+void RigidBody::EnableCCD(bool enable)
+{
+    m_World.GetBodyInterface().SetMotionQuality(
+        *m_BodyID, enable ? JPH::EMotionQuality::LinearCast : JPH::EMotionQuality::Discrete);
+}
+
+u32 RigidBody::GetBodyID() const
+{
+    return m_BodyID ? m_BodyID->GetIndex() : 0;
+}
+
 } // namespace synapse::physics

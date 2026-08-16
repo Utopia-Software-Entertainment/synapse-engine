@@ -3,8 +3,15 @@ add_executable(synapse_core_tests
     test_timer.cpp
     test_eventbus.cpp
     test_scheduler.cpp
+    test_tiered_scheduler.cpp
     test_uuid.cpp
     test_allocators.cpp
+    test_math.cpp
+    test_handle.cpp
+    test_ecs.cpp
+    test_threadpool.cpp
+    test_doublebuffer.cpp
+    test_mainloop.cpp
 )
 
 target_link_libraries(synapse_core_tests PRIVATE

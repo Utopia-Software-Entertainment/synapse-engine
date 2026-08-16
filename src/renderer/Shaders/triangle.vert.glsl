@@ -10,12 +10,15 @@ layout(set = 0, binding = 0) uniform CameraUBO {
     mat4 view;
     mat4 proj;
     mat4 lightVP;
+    vec4 camPos;
+    vec4 sunDir;
 } ubo;
 
 layout(location = 0) out vec3 fragColor;
 layout(location = 1) out vec2 fragUv;
 layout(location = 2) out vec3 fragNormal;
 layout(location = 3) out vec4 fragLightPos;
+layout(location = 4) out vec3 fragWorldPos;
 
 void main()
 {
@@ -25,4 +28,5 @@ void main()
     fragUv = inUv;
     fragNormal = mat3(inInstanceModel) * inNormal;
     fragLightPos = ubo.lightVP * worldPos;
+    fragWorldPos = worldPos.xyz;
 }

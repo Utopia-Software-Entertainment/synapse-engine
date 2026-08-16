@@ -16,6 +16,7 @@ list(PREPEND CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/cmake/Modules")
 # ── Options ──
 option(SYNAPSE_BUILD_TESTS "Build tests" ON)
 option(SYNAPSE_BUILD_EDITOR "Build editor tools" ON)
+option(SYNAPSE_BUILD_APPS "Build demo apps" ON)
 option(SYNAPSE_USE_TRACY "Enable Tracy frame profiling" OFF)
 
 # ── System-level dependencies (SDK) ──
@@ -61,10 +62,18 @@ if(SYNAPSE_BUILD_TESTS)
     add_subdirectory(tests)
 endif()
 
+# ── Apps de démo (window_demo, etc.) ──
+if(SYNAPSE_BUILD_APPS)
+    add_subdirectory(apps)
+endif()
+
 # ── Engine executable ──
 add_executable(synapse_engine
     src/main.cpp
 )
+
+target_compile_definitions(synapse_engine PRIVATE
+    SYNAPSE_ASSET_DIR="${CMAKE_SOURCE_DIR}/assets")
 
 target_link_libraries(synapse_engine PRIVATE
     synapse_core

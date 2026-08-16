@@ -17,6 +17,7 @@
 - [ ] **3.9** Forward+ Rendering Pipeline (Light Culling, Compute Shader, centaines lumières) — `ForwardPlusRenderer.h/.cpp`, `LightCullingPass.h`, `LightGrid.h` — **6j**
 - [ ] **3.10** Occlusion & Frustum Culling (Hi-Z, 2 frustums VR, 60-90% draw calls éliminés) — `CullingSystem.h/.cpp`, `FrustumCuller.h`, `OcclusionQueries.h` — **4j**
 - [ ] **3.15** HAL — Abstraction du Renderer (RenderAPI.h, Pimpl) — `RenderAPI.h`, `VulkanRenderAPI.cpp`, `RenderCommand.h` — **3j**
+- [x] **3.16** PBR & High-End Visuals (Cook-Torrance, HDR, Bloom, ACES, FXAA) — **5j**
 
 ## MODULE 05 — Physics (Phase 2)
 
